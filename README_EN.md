@@ -15,6 +15,12 @@
 
 LiveSecBench is a dynamic safety benchmark tailored for Chinese-language scenarios. It combines adversarial question sets with model-vs-model judging and an auditable scoring pipeline, covering ethics, legality, factuality, privacy, robustness, and reasoning safety. A full description of the benchmark is provided in the paper [LiveSecBench: A Dynamic and Culturally-Relevant AI Safety Benchmark for LLMs in Chinese Context](https://arxiv.org/abs/2511.02366).
 
+## WeChat Community
+
+Scan to join the LiveSecBench WeChat group for the latest updates and technical discussions:
+
+![LiveSecBench WeChat Group](https://filecdn.intokentech.cn/public/weixin_group.png)
+
 ## Highlights
 
 - Real-world context: question sets capture explicit and implicit risks in Chinese scenarios.

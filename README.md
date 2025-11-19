@@ -13,6 +13,12 @@
 
 LiveSecBench 是一个面向中文场景的大模型安全评测基准。框架结合动态题库、模型对战与客观评分流程，可在伦理、合法性、事实性、隐私、对抗鲁棒与推理安全等核心维度持续追踪模型表现。完整方法论请参见论文 [LiveSecBench: A Dynamic and Culturally-Relevant AI Safety Benchmark for LLMs in Chinese Context](https://arxiv.org/abs/2511.02366)。
 
+## 微信交流群
+
+欢迎扫码加入 LiveSecBench 微信交流群，获取最新评测动态与技术讨论：
+
+![LiveSecBench 微信交流群](https://filecdn.intokentech.cn/public/weixin_group.png)
+
 ## 项目亮点
 
 - 真实语境：题库覆盖多种中文安全场景，区分显性与隐性风险表达。
