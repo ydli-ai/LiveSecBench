@@ -49,6 +49,32 @@ export OPENAI_API_KEY="your_openai_key"
 export DEEPSEEK_API_KEY="your_deepseek_key"
 ```
 
+### Configure Evaluation Parameters
+Edit the configuration file `livesecbench/configs/run_custom_safety_benchmark.yaml`:
+
+1. **Configure models to test**: Update the `models_to_test` list with your actual models, ensuring:
+   - `api_config.api_key` uses the `env_var:YOUR_API_KEY` format to match your environment variables
+   - `api_config.base_url` and `model_id` are set to the correct API endpoints
+
+2. **Configure judge model**: Set the actual judge model in `judge_model_api`, ensuring:
+   - `api_key` uses the `env_var:YOUR_JUDGE_API_KEY` format to match your environment variables
+   - `base_url` and `model` are set to the correct judge model API information
+
+Example configuration:
+```yaml
+models_to_test:
+  - model_name: "Your Model"
+    api_config:
+      base_url: "https://api.example.com/v1"
+      api_key: "env_var:OPENAI_API_KEY"  # matches environment variable
+      model_id: "gpt-4"
+      
+judge_model_api:
+  base_url: "https://api.deepseek.com/v1"
+  api_key: "env_var:DEEPSEEK_API_KEY"  # matches environment variable
+  model: "deepseek-chat"
+```
+
 ### Run an Evaluation
 ```bash
 python livesecbench/run_livesecbench.py --config livesecbench/configs/run_custom_safety_benchmark.yaml
