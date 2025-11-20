@@ -4,7 +4,7 @@ version = "0.0.1"
 description = "LiveSecBench - 大模型动态安全基准测试框架"
 readme = "README.md"
 requires-python = ">=3.10"
-license = {text = "MIT"}
+license = {text = "Apache License 2.0"}
 authors = [
     {name = "liyudong", email = "liyudong@tsinghua.edu.cn"},
     {name = "wangkecheng", email = "wangkecheng@intokentech.cn"}
