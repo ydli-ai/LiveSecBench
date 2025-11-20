@@ -1,6 +1,6 @@
 # LiveSecBench 核心依赖
 # 从 pyproject.toml 提取，便于快速安装
-httpx>=0.28.1
+httpx[http2]>=0.28.1  # 包含 http2 支持（需要 h2 包）
 json-repair>=0.53.0
 numpy>=2.2.6
 pandas>=2.3.3
