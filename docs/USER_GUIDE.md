@@ -29,7 +29,7 @@
 ```bash
 git clone https://github.com/ydli-ai/LiveSecBench.git
 cd LiveSecBench
-pip install -e .
+python -m pip install -e .
 ```
 
 ### 1.3 配置环境变量
@@ -46,14 +46,13 @@ export MY_CUSTOM_ENDPOINT="https://api.custom.com/v1"
 ### 1.4 运行第一个评测
 
 ```bash
-python -m livesecbench.run_livesecbench \
-  --config livesecbench/configs/run_custom_safety_benchmark.yaml
+python livesecbench/run_livesecbench.py --config livesecbench/configs/run_custom_safety_benchmark.yaml
 ```
 
 ### 1.5 运行测试 / Mock
 
 ```bash
-pip install -e .[test]
+python -m pip install -e .[test]
 pytest -v                    # 全量测试
 pytest -k config_manager -v  # 仅验证配置/解析相关模块
 
@@ -273,7 +272,7 @@ judge_model_api:
 
 ### 3.1 CLI 工作流
 
-`python -m livesecbench.run_livesecbench --config ...` 会执行以下步骤：
+`python livesecbench/run_livesecbench.py --config ...` 会执行以下步骤：
 
 1. 初始化日志与任务管理器，记录 `task_id`。
 2. 使用 `ConfigManager` 校验配置，提前输出具体错误。
@@ -366,7 +365,7 @@ CONFIGS=(
 )
 for cfg in "${CONFIGS[@]}"; do
   echo "Running $cfg"
-  python -m livesecbench.run_livesecbench --config "$cfg"
+  python livesecbench/run_livesecbench.py --config "$cfg"
 done
 ```
 

@@ -21,7 +21,7 @@
 
 ```
 ┌────────────────────────────────────────────────────────┐
-│  CLI / Scripts                                         │  python -m livesecbench.run_livesecbench
+│  CLI / Scripts                                         │  python livesecbench/run_livesecbench.py
 └────────────────────────────────────────────────────────┘
                 │
                 ▼

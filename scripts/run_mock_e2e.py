@@ -24,9 +24,9 @@ try:
 except ImportError as e:
     print(f"导入错误: {e}")
     print("\n💡 提示: 请先安装项目依赖:")
-    print("   pip install -e .")
+    print("   python -m pip install -e .")
     print("   或者:")
-    print("   pip install -r requirements.txt")
+    print("   python -m pip install -r requirements.txt")
     sys.exit(1)
 
 
