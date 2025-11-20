@@ -40,7 +40,7 @@ Scan to join the LiveSecBench WeChat group for the latest updates and technical 
 ```bash
 git clone https://github.com/ydli-ai/LiveSecBench.git
 cd LiveSecBench
-pip install -e .
+python -m pip install -e .
 ```
 
 ### Environment Variables
@@ -51,13 +51,12 @@ export DEEPSEEK_API_KEY="your_deepseek_key"
 
 ### Run an Evaluation
 ```bash
-python -m livesecbench.run_livesecbench \
-  --config livesecbench/configs/run_custom_safety_benchmark.yaml
+python livesecbench/run_livesecbench.py --config livesecbench/configs/run_custom_safety_benchmark.yaml
 ```
 
 ### Run Tests
 ```bash
-pip install -e .[test]
+python -m pip install -e .[test]
 pytest -v
 pytest -k config_manager -v  # focus on config parsing, no external calls
 ```

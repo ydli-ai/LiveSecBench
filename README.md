@@ -38,7 +38,7 @@ LiveSecBench 是一个面向中文场景的大模型安全评测基准。框架�
 ```bash
 git clone https://github.com/ydli-ai/LiveSecBench.git
 cd LiveSecBench
-pip install -e .
+python -m pip install -e .
 ```
 
 ### 配置环境变量
@@ -49,13 +49,12 @@ export DEEPSEEK_API_KEY="your_deepseek_key"
 
 ### 运行评测
 ```bash
-python -m livesecbench.run_livesecbench \
-  --config livesecbench/configs/run_custom_safety_benchmark.yaml
+python livesecbench/run_livesecbench.py --config livesecbench/configs/run_custom_safety_benchmark.yaml
 ```
 
 ### 运行测试
 ```bash
-pip install -e .[test]
+python -m pip install -e .[test]
 pytest -v
 pytest -k config_manager -v  # 仅验证配置解析等模块
 ```

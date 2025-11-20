@@ -19,8 +19,7 @@
 
 ### 1.1 直接使用 CLI
 ```bash
-python -m livesecbench.run_livesecbench \
-  --config livesecbench/configs/run_custom_safety_benchmark.yaml
+python livesecbench/run_livesecbench.py --config livesecbench/configs/run_custom_safety_benchmark.yaml
 ```
 
 > 确保 `models_to_test` 至少包含两个模型，否则 ELO 对战无法进行。
@@ -189,7 +188,7 @@ CONFIGS=(
 
 for cfg in "${CONFIGS[@]}"; do
   echo "Running $cfg"
-  python -m livesecbench.run_livesecbench --config "$cfg"
+  python livesecbench/run_livesecbench.py --config "$cfg"
 done
 ```
 
@@ -207,7 +206,7 @@ python scripts/run_mock_e2e.py
 
 ### 5.3 pytest 快速验证
 ```bash
-pip install -e .[test]
+python -m pip install -e .[test]
 pytest -k config_manager -v    # 只验证配置解析
 pytest -k http_client -v       # 验证 HTTP/重试逻辑
 ```
