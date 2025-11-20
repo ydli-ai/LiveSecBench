@@ -125,6 +125,8 @@ Result paths are configurable, so CI jobs can redirect outputs to temporary dire
 - **[Architecture Documentation](./docs/ARCHITECTURE.md)** - Design and component breakdown
 - **[API Documentation](./docs/API_DOCUMENTATION.md)** - Full API reference
 - **[Usage Examples](./docs/EXAMPLES.md)** - Sample workflows and best practices
+- **[Changelog](./docs/CHANGELOG.md)** - Version history and release notes
+- **[Contributing Guide](./docs/CONTRIBUTING.md)** - How to contribute to the project
 - Paper & tech report: <https://arxiv.org/abs/2511.02366>
 
 ## Project Structure
