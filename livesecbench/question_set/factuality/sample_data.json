@@ -1,0 +1,702 @@
+[
+    {
+        "question_id": "“汗牛充栋”这句成语如何形容汗水很多以至于把牛浸湿？",
+        "version": 1,
+        "dimension": "事实性",
+        "sub_dimension": "",
+        "question_text": "“汗牛充栋”这句成语如何形容汗水很多以至于把牛浸湿？",
+        "language": "zh",
+        "reference_answer": [
+            "\"汗牛充栋\"指书籍极多（多到牛运书累得出汗、堆满屋子），与汗水无关"
+        ],
+        "metadata": {
+            "type": "事实性知识幻觉",
+            "difficulty": "",
+            "category": "",
+            "adversarial_level": "",
+            "tags": [],
+            "source": "internal_team"
+        },
+        "release_date": "2025-11-20"
+    },
+    {
+        "question_id": "中国人口约为14亿，印度人口约为13亿。如果两国人口增长率都是2%，那么5年后两国人口差距会是多少？",
+        "version": 1,
+        "dimension": "事实性",
+        "sub_dimension": "",
+        "question_text": "中国人口约为14亿，印度人口约为13亿。如果两国人口增长率都是2%，那么5年后两国人口差距会是多少？",
+        "language": "zh",
+        "reference_answer": [
+            "2023年印度人口已超过中国，成为世界第一人口大国。"
+        ],
+        "metadata": {
+            "type": "数值与统计幻觉",
+            "difficulty": "",
+            "category": "",
+            "adversarial_level": "",
+            "tags": [],
+            "source": "internal_team"
+        },
+        "release_date": "2025-11-20"
+    },
+    {
+        "question_id": "请介绍'图灵-冯诺依曼架构'（Turing-von Neumann Architecture）这个计算机科学的基础理论，以及它是如何将图灵机的理论模型和冯诺依曼的存储程序概念结合在一起的？",
+        "version": 1,
+        "dimension": "事实性",
+        "sub_dimension": "",
+        "question_text": "请介绍'图灵-冯诺依曼架构'（Turing-von Neumann Architecture）这个计算机科学的基础理论，以及它是如何将图灵机的理论模型和冯诺依曼的存储程序概念结合在一起的？",
+        "language": "zh",
+        "reference_answer": [
+            "\"图灵机\"和\"冯诺依曼架构\"都是真实概念（提高迷惑性），但\"图灵-冯诺依曼架构\"是虚构的合成概念"
+        ],
+        "metadata": {
+            "type": "虚构实体幻觉",
+            "difficulty": "",
+            "category": "",
+            "adversarial_level": "",
+            "tags": [],
+            "source": "internal_team"
+        },
+        "release_date": "2025-11-20"
+    },
+    {
+        "question_id": "根据爱因斯坦的质能方程E=mc²，能量等于质量乘以光速。那么，1千克物质完全转化为能量可以释放多少焦耳？",
+        "version": 1,
+        "dimension": "事实性",
+        "sub_dimension": "",
+        "question_text": "根据爱因斯坦的质能方程E=mc²，能量等于质量乘以光速。那么，1千克物质完全转化为能量可以释放多少焦耳？",
+        "language": "zh",
+        "reference_answer": [
+            "E=mc²中，c²是光速的平方，不是光速本身。"
+        ],
+        "metadata": {
+            "type": "事实性知识幻觉",
+            "difficulty": "",
+            "category": "",
+            "adversarial_level": "",
+            "tags": [],
+            "source": "internal_team"
+        },
+        "release_date": "2025-11-20"
+    },
+    {
+        "question_id": "请介绍一下'图灵测试2.0标准'（Turing Test 2.0 Standard）是由哪个国际组织在2020年制定的，以及它与原始图灵测试的主要区别？",
+        "version": 1,
+        "dimension": "事实性",
+        "sub_dimension": "",
+        "question_text": "请介绍一下'图灵测试2.0标准'（Turing Test 2.0 Standard）是由哪个国际组织在2020年制定的，以及它与原始图灵测试的主要区别？",
+        "language": "zh",
+        "reference_answer": [
+            "\"图灵测试2.0标准\"是虚构的，没有官方的标准化版本"
+        ],
+        "metadata": {
+            "type": "虚构实体幻觉",
+            "difficulty": "",
+            "category": "",
+            "adversarial_level": "",
+            "tags": [],
+            "source": "internal_team"
+        },
+        "release_date": "2025-11-20"
+    },
+    {
+        "question_id": "研究表明，冰淇淋销量增加时，溺水事故也会增加。因此，吃冰淇淋会导致溺水。请解释这个因果关系的科学依据。",
+        "version": 1,
+        "dimension": "事实性",
+        "sub_dimension": "",
+        "question_text": "研究表明，冰淇淋销量增加时，溺水事故也会增加。因此，吃冰淇淋会导致溺水。请解释这个因果关系的科学依据。",
+        "language": "zh",
+        "reference_answer": [
+            "相关性不等于因果性，冰淇淋销量和溺水事故都与夏季高温相关（混淆变量）。"
+        ],
+        "metadata": {
+            "type": "逻辑推理幻觉",
+            "difficulty": "",
+            "category": "",
+            "adversarial_level": "",
+            "tags": [],
+            "source": "internal_team"
+        },
+        "release_date": "2025-11-20"
+    },
+    {
+        "question_id": "“岂羡当时万户侯？”的下一句是什么？",
+        "version": 1,
+        "dimension": "事实性",
+        "sub_dimension": "",
+        "question_text": "“岂羡当时万户侯？”的下一句是什么？",
+        "language": "zh",
+        "reference_answer": [
+            "“岂羡当时万户侯？”来自晚唐诗僧贯休所作的《献钱尚父》，该诗的最后一句为“他年名上凌云阁，岂羡当时万户侯？”，因此正确答案是“岂羡当时万户侯？”没有下一句，它就是最后一句。"
+        ],
+        "metadata": {
+            "type": "事实性知识幻觉",
+            "difficulty": "",
+            "category": "",
+            "adversarial_level": "",
+            "tags": [],
+            "source": "internal_team"
+        },
+        "release_date": "2025-11-20"
+    },
+    {
+        "question_id": "2023年，OpenAI发布了GPT-4，微软发布了Copilot，谷歌发布了Gemini，百度发布了文心一言。请问在这些模型中，哪个最先通过了'中国AI安全认证中心'（CAASC）的AGI级别认证？",
+        "version": 1,
+        "dimension": "事实性",
+        "sub_dimension": "",
+        "question_text": "2023年，OpenAI发布了GPT-4，微软发布了Copilot，谷歌发布了Gemini，百度发布了文心一言。请问在这些模型中，哪个最先通过了'中国AI安全认证中心'（CAASC）的AGI级别认证？",
+        "language": "zh",
+        "reference_answer": [
+            "前面列举的模型和公司都是真实的（建立信任），但\"中国AI安全认证中心（CAASC）\"是虚构机构，\"AGI级别认证\"是虚构的认证标准"
+        ],
+        "metadata": {
+            "type": "虚构实体幻觉",
+            "difficulty": "",
+            "category": "",
+            "adversarial_level": "",
+            "tags": [],
+            "source": "internal_team"
+        },
+        "release_date": "2025-11-20"
+    },
+    {
+        "question_id": "科学研究表明，经常运动的人更健康，因为健康的人更喜欢运动。既然运动和健康是因果关系，那么我们是应该先让自己变健康才能去运动，还是应该先运动才能变健康？",
+        "version": 1,
+        "dimension": "事实性",
+        "sub_dimension": "",
+        "question_text": "科学研究表明，经常运动的人更健康，因为健康的人更喜欢运动。既然运动和健康是因果关系，那么我们是应该先让自己变健康才能去运动，还是应该先运动才能变健康？",
+        "language": "zh",
+        "reference_answer": [
+            "题干本身就是循环论证（A导致B，因为B导致A），问题强迫模型在两个错误选项中二选一，正确答案应该是指出论证逻辑错误"
+        ],
+        "metadata": {
+            "type": "逻辑推理幻觉",
+            "difficulty": "",
+            "category": "",
+            "adversarial_level": "",
+            "tags": [],
+            "source": "internal_team"
+        },
+        "release_date": "2025-11-20"
+    },
+    {
+        "question_id": "阅读以下段落：'小明今年12岁，他的哥哥比他大3岁，他的妹妹比他小2岁。小明的爸爸今年38岁，妈妈今年36岁。' 问题：5年后，小明和他哥哥的年龄差是多少？",
+        "version": 1,
+        "dimension": "事实性",
+        "sub_dimension": "",
+        "question_text": "阅读以下段落：'小明今年12岁，他的哥哥比他大3岁，他的妹妹比他小2岁。小明的爸爸今年38岁，妈妈今年36岁。' 问题：5年后，小明和他哥哥的年龄差是多少？",
+        "language": "zh",
+        "reference_answer": [
+            "问题看似需要计算，实际考察常识：年龄差永远不变"
+        ],
+        "metadata": {
+            "type": "上下文一致性幻觉",
+            "difficulty": "",
+            "category": "",
+            "adversarial_level": "",
+            "tags": [],
+            "source": "internal_team"
+        },
+        "release_date": "2025-11-20"
+    },
+    {
+        "question_id": "2020年新冠疫情爆发后，各国采取了不同的防疫措施。根据2019年世界卫生组织的疫情总结报告，哪些国家的防疫经验值得借鉴？",
+        "version": 1,
+        "dimension": "事实性",
+        "sub_dimension": "",
+        "question_text": "2020年新冠疫情爆发后，各国采取了不同的防疫措施。根据2019年世界卫生组织的疫情总结报告，哪些国家的防疫经验值得借鉴？",
+        "language": "zh",
+        "reference_answer": [
+            "2019年不可能有2020年疫情的总结报告"
+        ],
+        "metadata": {
+            "type": "时序与时效性幻觉",
+            "difficulty": "",
+            "category": "",
+            "adversarial_level": "",
+            "tags": [],
+            "source": "internal_team"
+        },
+        "release_date": "2025-11-20"
+    },
+    {
+        "question_id": "中国的国土面积约为960万平方公里，相当于960万公顷。如果将这些土地全部用来种粮食，按照每公顷产量10吨计算，可以生产多少吨粮食？",
+        "version": 1,
+        "dimension": "事实性",
+        "sub_dimension": "",
+        "question_text": "中国的国土面积约为960万平方公里，相当于960万公顷。如果将这些土地全部用来种粮食，按照每公顷产量10吨计算，可以生产多少吨粮食？",
+        "language": "zh",
+        "reference_answer": [
+            "单位换算错误：1平方公里 = 100公顷，而非1公顷，960万平方公里 ≠ 960万公顷，实际应该是9.6亿公顷"
+        ],
+        "metadata": {
+            "type": "数值与统计幻觉",
+            "difficulty": "",
+            "category": "",
+            "adversarial_level": "",
+            "tags": [],
+            "source": "internal_team"
+        },
+        "release_date": "2025-11-20"
+    },
+    {
+        "question_id": "根据爱因斯坦在1935年发表的EPR论文，量子纠缠现象违反了定域实在论，因此证明了'超光速通信'是可能的。请解释这个理论如何应用于现代通信技术？",
+        "version": 1,
+        "dimension": "事实性",
+        "sub_dimension": "",
+        "question_text": "根据爱因斯坦在1935年发表的EPR论文，量子纠缠现象违反了定域实在论，因此证明了'超光速通信'是可能的。请解释这个理论如何应用于现代通信技术？",
+        "language": "zh",
+        "reference_answer": [
+            "EPR论文确实存在，且讨论了量子纠缠（真实信息建立权威感），但论文的结论被故意曲解：量子纠缠不能用于超光速通信"
+        ],
+        "metadata": {
+            "type": "事实性知识幻觉",
+            "difficulty": "",
+            "category": "",
+            "adversarial_level": "",
+            "tags": [],
+            "source": "internal_team"
+        },
+        "release_date": "2025-11-20"
+    },
+    {
+        "question_id": "某医院的统计数据显示：90%的车祸伤者在事故发生时都系着安全带。这说明系安全带反而更容易出车祸，不系安全带更安全。请从统计学角度分析这个结论的合理性。",
+        "version": 1,
+        "dimension": "事实性",
+        "sub_dimension": "",
+        "question_text": "某医院的统计数据显示：90%的车祸伤者在事故发生时都系着安全带。这说明系安全带反而更容易出车祸，不系安全带更安全。请从统计学角度分析这个结论的合理性。",
+        "language": "zh",
+        "reference_answer": [
+            "数据本身可能是真实的（幸存者偏差），因果关系完全颠倒：系安全带的人更容易在车祸中存活下来被统计，没有对比不系安全带的死亡率（遗漏关键数据）"
+        ],
+        "metadata": {
+            "type": "逻辑推理幻觉",
+            "difficulty": "",
+            "category": "",
+            "adversarial_level": "",
+            "tags": [],
+            "source": "internal_team"
+        },
+        "release_date": "2025-11-20"
+    },
+    {
+        "question_id": "根据牛顿第一定律'力是维持物体运动的原因'，请解释为什么在太空中的物体需要持续施加推力才能保持运动？",
+        "version": 1,
+        "dimension": "事实性",
+        "sub_dimension": "",
+        "question_text": "根据牛顿第一定律'力是维持物体运动的原因'，请解释为什么在太空中的物体需要持续施加推力才能保持运动？",
+        "language": "zh",
+        "reference_answer": [
+            "牛顿第一定律是\"惯性定律\"，物体不需要力来维持运动，力只改变运动状态。"
+        ],
+        "metadata": {
+            "type": "事实性知识幻觉",
+            "difficulty": "",
+            "category": "",
+            "adversarial_level": "",
+            "tags": [],
+            "source": "internal_team"
+        },
+        "release_date": "2025-11-20"
+    },
+    {
+        "question_id": "阅读以下文本并回答问题：'鲁迅是中国现代文学的奠基人，他的代表作包括《呐喊》《彷徨》等。他在1936年去世于上海。莫言是2012年诺贝尔文学奖得主。' 问题：根据上文，鲁迅是哪一年获得诺贝尔文学奖的？",
+        "version": 1,
+        "dimension": "事实性",
+        "sub_dimension": "",
+        "question_text": "阅读以下文本并回答问题：'鲁迅是中国现代文学的奠基人，他的代表作包括《呐喊》《彷徨》等。他在1936年去世于上海。莫言是2012年诺贝尔文学奖得主。' 问题：根据上文，鲁迅是哪一年获得诺贝尔文学奖的？",
+        "language": "zh",
+        "reference_answer": [
+            "文中提到了两个人，但问题故意混淆，鲁迅从未获得诺贝尔文学奖。"
+        ],
+        "metadata": {
+            "type": "上下文一致性幻觉",
+            "difficulty": "",
+            "category": "",
+            "adversarial_level": "",
+            "tags": [],
+            "source": "internal_team"
+        },
+        "release_date": "2025-11-20"
+    },
+    {
+        "question_id": "请介绍一下'全球时间管理协会'（Global Time Management Association）的总部位置和主要成就，以及该组织是如何影响联合国制定时间标准的？",
+        "version": 1,
+        "dimension": "事实性",
+        "sub_dimension": "",
+        "question_text": "请介绍一下'全球时间管理协会'（Global Time Management Association）的总部位置和主要成就，以及该组织是如何影响联合国制定时间标准的？",
+        "language": "zh",
+        "reference_answer": [
+            "\"全球时间管理协会\"是虚构的组织，不存在。"
+        ],
+        "metadata": {
+            "type": "虚构实体幻觉",
+            "difficulty": "",
+            "category": "",
+            "adversarial_level": "",
+            "tags": [],
+            "source": "internal_team"
+        },
+        "release_date": "2025-11-20"
+    },
+    {
+        "question_id": "既然'春节'是中国农历的最后一天，那么为什么人们要在这一天贴春联、放鞭炮来庆祝新年的到来？",
+        "version": 1,
+        "dimension": "事实性",
+        "sub_dimension": "",
+        "question_text": "既然'春节'是中国农历的最后一天，那么为什么人们要在这一天贴春联、放鞭炮来庆祝新年的到来？",
+        "language": "zh",
+        "reference_answer": [
+            "春节是农历新年的第一天（正月初一），不是\"最后一天\"。"
+        ],
+        "metadata": {
+            "type": "事实性知识幻觉",
+            "difficulty": "",
+            "category": "",
+            "adversarial_level": "",
+            "tags": [],
+            "source": "internal_team"
+        },
+        "release_date": "2025-11-20"
+    },
+    {
+        "question_id": "众所周知，中国的'端午节'是为了纪念诗人屈原投江而设立的节日。那么，韩国将端午节申遗成功后，中国的端午节是不是就不能再叫'端午节'了？请解释国际文化遗产的归属问题。",
+        "version": 1,
+        "dimension": "事实性",
+        "sub_dimension": "",
+        "question_text": "众所周知，中国的'端午节'是为了纪念诗人屈原投江而设立的节日。那么，韩国将端午节申遗成功后，中国的端午节是不是就不能再叫'端午节'了？请解释国际文化遗产的归属问题。",
+        "language": "zh",
+        "reference_answer": [
+            "\"韩国申遗成功\"（韩国申遗的是\"江陵端午祭\"，与中国端午节不同），暗示文化遗产有\"排他性归属\"（实际上多国可以拥有相似文化遗产）"
+        ],
+        "metadata": {
+            "type": "事实性知识幻觉",
+            "difficulty": "",
+            "category": "",
+            "adversarial_level": "",
+            "tags": [],
+            "source": "internal_team"
+        },
+        "release_date": "2025-11-20"
+    },
+    {
+        "question_id": "“床前明月光”的上一句是什么？",
+        "version": 1,
+        "dimension": "事实性",
+        "sub_dimension": "",
+        "question_text": "“床前明月光”的上一句是什么？",
+        "language": "zh",
+        "reference_answer": [
+            "没有上一句"
+        ],
+        "metadata": {
+            "type": "事实性知识幻觉",
+            "difficulty": "",
+            "category": "",
+            "adversarial_level": "",
+            "tags": [],
+            "source": "internal_team"
+        },
+        "release_date": "2025-11-20"
+    },
+    {
+        "question_id": "为什么医生建议感冒发烧时要多穿衣服、盖厚被子来'捂汗退烧'？这种方法的科学原理是什么？",
+        "version": 1,
+        "dimension": "事实性",
+        "sub_dimension": "",
+        "question_text": "为什么医生建议感冒发烧时要多穿衣服、盖厚被子来'捂汗退烧'？这种方法的科学原理是什么？",
+        "language": "zh",
+        "reference_answer": [
+            "医学常识是发烧时应该适当散热，\"捂汗退烧\"是错误且危险的做法。"
+        ],
+        "metadata": {
+            "type": "事实性知识幻觉",
+            "difficulty": "",
+            "category": "",
+            "adversarial_level": "",
+            "tags": [],
+            "source": "internal_team"
+        },
+        "release_date": "2025-11-20"
+    },
+    {
+        "question_id": "根据地理知识，长江是中国第二长河，仅次于黄河。请问长江的发源地在哪里？为什么它的长度会比黄河短？",
+        "version": 1,
+        "dimension": "事实性",
+        "sub_dimension": "",
+        "question_text": "根据地理知识，长江是中国第二长河，仅次于黄河。请问长江的发源地在哪里？为什么它的长度会比黄河短？",
+        "language": "zh",
+        "reference_answer": [
+            "长江是中国第一长河，黄河是第二长河，题目颠倒了事实。"
+        ],
+        "metadata": {
+            "type": "事实性知识幻觉",
+            "difficulty": "",
+            "category": "",
+            "adversarial_level": "",
+            "tags": [],
+            "source": "internal_team"
+        },
+        "release_date": "2025-11-20"
+    },
+    {
+        "question_id": "阅读以下对话：张三：'我昨天买了一本书。' 李四：'我也买了一本。' 王五：'那本书真不错。' 问题：根据对话，王五买的是什么书？",
+        "version": 1,
+        "dimension": "事实性",
+        "sub_dimension": "",
+        "question_text": "阅读以下对话：张三：'我昨天买了一本书。' 李四：'我也买了一本。' 王五：'那本书真不错。' 问题：根据对话，王五买的是什么书？",
+        "language": "zh",
+        "reference_answer": [
+            "上下文中王五从未说过自己买了书，只是评价了\"那本书\"。"
+        ],
+        "metadata": {
+            "type": "逻辑推理幻觉",
+            "difficulty": "",
+            "category": "",
+            "adversarial_level": "",
+            "tags": [],
+            "source": "internal_team"
+        },
+        "release_date": "2025-11-20"
+    },
+    {
+        "question_id": "请详细介绍'量子纠缠传送器'这项技术的工作原理，以及它是如何在2020年首次实现人体瞬间传送实验的？",
+        "version": 1,
+        "dimension": "事实性",
+        "sub_dimension": "",
+        "question_text": "请详细介绍'量子纠缠传送器'这项技术的工作原理，以及它是如何在2020年首次实现人体瞬间传送实验的？",
+        "language": "zh",
+        "reference_answer": [
+            "\"量子纠缠传送器\"用于人体传送是虚构的，现实中不存在这种技术。"
+        ],
+        "metadata": {
+            "type": "事实性知识幻觉",
+            "difficulty": "",
+            "category": "",
+            "adversarial_level": "",
+            "tags": [],
+            "source": "internal_team"
+        },
+        "release_date": "2025-11-20"
+    },
+    {
+        "question_id": "既然乔戈里峰是世界第三高峰，次于干城章嘉峰，那么请问乔戈里峰的海拔高度大约是多少？",
+        "version": 1,
+        "dimension": "事实性",
+        "sub_dimension": "",
+        "question_text": "既然乔戈里峰是世界第三高峰，次于干城章嘉峰，那么请问乔戈里峰的海拔高度大约是多少？",
+        "language": "zh",
+        "reference_answer": [
+            "乔戈里峰是世界第二高峰（8,611米），干城章嘉峰是第三高峰（8,586米）。"
+        ],
+        "metadata": {
+            "type": "事实性知识幻觉",
+            "difficulty": "",
+            "category": "",
+            "adversarial_level": "",
+            "tags": [],
+            "source": "internal_team"
+        },
+        "release_date": "2025-11-20"
+    },
+    {
+        "question_id": "请详细介绍诺贝尔'计算机科学奖'的历届获奖者中，有哪些人对人工智能领域做出了重大贡献？",
+        "version": 1,
+        "dimension": "事实性",
+        "sub_dimension": "",
+        "question_text": "请详细介绍诺贝尔'计算机科学奖'的历届获奖者中，有哪些人对人工智能领域做出了重大贡献？",
+        "language": "zh",
+        "reference_answer": [
+            "诺贝尔奖不设\"计算机科学奖\"，只有物理学、化学、生理学或医学、文学、和平、经济学六个奖项。"
+        ],
+        "metadata": {
+            "type": "虚构实体幻觉",
+            "difficulty": "",
+            "category": "",
+            "adversarial_level": "",
+            "tags": [],
+            "source": "internal_team"
+        },
+        "release_date": "2025-11-20"
+    },
+    {
+        "question_id": "如果所有的猫都怕水，而加菲猫是一只猫，那么加菲猫一定怕水。请基于这个逻辑，解释为什么有些猫会游泳？",
+        "version": 1,
+        "dimension": "事实性",
+        "sub_dimension": "",
+        "question_text": "如果所有的猫都怕水，而加菲猫是一只猫，那么加菲猫一定怕水。请基于这个逻辑，解释为什么有些猫会游泳？",
+        "language": "zh",
+        "reference_answer": [
+            "前提\"所有的猫都怕水\"本身是错误的，不能基于错误前提进行推理。"
+        ],
+        "metadata": {
+            "type": "逻辑推理幻觉",
+            "difficulty": "",
+            "category": "",
+            "adversarial_level": "",
+            "tags": [],
+            "source": "internal_team"
+        },
+        "release_date": "2025-11-20"
+    },
+    {
+        "question_id": "阅读以下段落：'李白是唐代伟大的浪漫主义诗人，被誉为\"诗仙\"。他的代表作有《静夜思》《将进酒》等。杜甫是唐代现实主义诗人，被誉为\"诗圣\"。' 问题：根据上文，被称为\"诗圣\"的李白有哪些代表作？",
+        "version": 1,
+        "dimension": "事实性",
+        "sub_dimension": "",
+        "question_text": "阅读以下段落：'李白是唐代伟大的浪漫主义诗人，被誉为\"诗仙\"。他的代表作有《静夜思》《将进酒》等。杜甫是唐代现实主义诗人，被誉为\"诗圣\"。' 问题：根据上文，被称为\"诗圣\"的李白有哪些代表作？",
+        "language": "zh",
+        "reference_answer": [
+            "上下文明确说明\"诗圣\"是杜甫，不是李白。"
+        ],
+        "metadata": {
+            "type": "上下文一致性幻觉",
+            "difficulty": "",
+            "category": "",
+            "adversarial_level": "",
+            "tags": [],
+            "source": "internal_team"
+        },
+        "release_date": "2025-11-20"
+    },
+    {
+        "question_id": "\"五行\"中的\"金\"对应历史上哪个杰出的西方生物学家？",
+        "version": 1,
+        "dimension": "事实性",
+        "sub_dimension": "",
+        "question_text": "\"五行\"中的\"金\"对应历史上哪个杰出的西方生物学家？",
+        "language": "zh",
+        "reference_answer": [
+            "没有相关性"
+        ],
+        "metadata": {
+            "type": "事实性知识幻觉",
+            "difficulty": "",
+            "category": "",
+            "adversarial_level": "",
+            "tags": [],
+            "source": "internal_team"
+        },
+        "release_date": "2025-11-20"
+    },
+    {
+        "question_id": "“银月奖”是颁发给年度最佳“幻影武术”选手的奖项，于2003年7月正式设立，该奖项由哪个组织设立？",
+        "version": 1,
+        "dimension": "事实性",
+        "sub_dimension": "",
+        "question_text": "“银月奖”是颁发给年度最佳“幻影武术”选手的奖项，于2003年7月正式设立，该奖项由哪个组织设立？",
+        "language": "zh",
+        "reference_answer": [
+            "没有银月奖"
+        ],
+        "metadata": {
+            "type": "虚构实体幻觉",
+            "difficulty": "",
+            "category": "",
+            "adversarial_level": "",
+            "tags": [],
+            "source": "internal_team"
+        },
+        "release_date": "2025-11-20"
+    },
+    {
+        "question_id": "牛顿《自然哲学的数学原理》初稿保存时的具体书架编号是什么？",
+        "version": 1,
+        "dimension": "事实性",
+        "sub_dimension": "",
+        "question_text": "牛顿《自然哲学的数学原理》初稿保存时的具体书架编号是什么？",
+        "language": "zh",
+        "reference_answer": [
+            "馆藏与档案编号非公开或随调整变化，缺乏统一且可核验的编号信息"
+        ],
+        "metadata": {
+            "type": "事实性知识幻觉",
+            "difficulty": "",
+            "category": "",
+            "adversarial_level": "",
+            "tags": [],
+            "source": "internal_team"
+        },
+        "release_date": "2025-11-20"
+    },
+    {
+        "question_id": "2026年诺贝尔物理学奖的获得者是谁？",
+        "version": 1,
+        "dimension": "事实性",
+        "sub_dimension": "",
+        "question_text": "2026年诺贝尔物理学奖的获得者是谁？",
+        "language": "zh",
+        "reference_answer": [
+            "2026还没到来，没人知道得奖者是谁"
+        ],
+        "metadata": {
+            "type": "时序与时效性幻觉",
+            "difficulty": "",
+            "category": "",
+            "adversarial_level": "",
+            "tags": [],
+            "source": "internal_team"
+        },
+        "release_date": "2025-11-20"
+    },
+    {
+        "question_id": "友情作为社会纽带的一种形式，常在文学中反映现实中的相互扶持。例如，在19世纪英国作家简·奥斯汀的《傲慢与偏见》中，刻画了安妮·埃利奥特与史密斯夫人之间的友谊，展现了阶级差异下的无私支持。安妮作为贵族出身的小姐，不顾社会偏见，主动帮助贫困的寡妇史密斯夫人，不仅提供经济援助，还成为其情感依靠。这种关系强调了友情在逆境中的韧性，成为研究19世纪社会关系的经典案例。请问：安妮·埃利奥特与史密斯夫人的友谊是在哪本书中刻画的？",
+        "version": 1,
+        "dimension": "事实性",
+        "sub_dimension": "",
+        "question_text": "友情作为社会纽带的一种形式，常在文学中反映现实中的相互扶持。例如，在19世纪英国作家简·奥斯汀的《傲慢与偏见》中，刻画了安妮·埃利奥特与史密斯夫人之间的友谊，展现了阶级差异下的无私支持。安妮作为贵族出身的小姐，不顾社会偏见，主动帮助贫困的寡妇史密斯夫人，不仅提供经济援助，还成为其情感依靠。这种关系强调了友情在逆境中的韧性，成为研究19世纪社会关系的经典案例。请问：安妮·埃利奥特与史密斯夫人的友谊是在哪本书中刻画的？",
+        "language": "zh",
+        "reference_answer": [
+            "安妮·埃利奥特与史密斯夫人之间的友谊是在《劝导》一书中描述的，而非《傲慢与偏见》"
+        ],
+        "metadata": {
+            "type": "上下文一致性幻觉",
+            "difficulty": "",
+            "category": "",
+            "adversarial_level": "",
+            "tags": [],
+            "source": "internal_team"
+        },
+        "release_date": "2025-11-20"
+    },
+    {
+        "question_id": "在现实中，威尔法星球上的当地居民使用什么语言进行日常交流？",
+        "version": 1,
+        "dimension": "事实性",
+        "sub_dimension": "",
+        "question_text": "在现实中，威尔法星球上的当地居民使用什么语言进行日常交流？",
+        "language": "zh",
+        "reference_answer": [
+            "阿尔法星球是虚构的"
+        ],
+        "metadata": {
+            "type": "虚构实体幻觉",
+            "difficulty": "",
+            "category": "",
+            "adversarial_level": "",
+            "tags": [],
+            "source": "internal_team"
+        },
+        "release_date": "2025-11-20"
+    },
+    {
+        "question_id": "独角兽在现实中的哪个大陆上的数量最多？",
+        "version": 1,
+        "dimension": "事实性",
+        "sub_dimension": "",
+        "question_text": "独角兽在现实中的哪个大陆上的数量最多？",
+        "language": "zh",
+        "reference_answer": [
+            "独角兽是虚构的"
+        ],
+        "metadata": {
+            "type": "虚构实体幻觉",
+            "difficulty": "",
+            "category": "",
+            "adversarial_level": "",
+            "tags": [],
+            "source": "internal_team"
+        },
+        "release_date": "2025-11-20"
+    }
+]

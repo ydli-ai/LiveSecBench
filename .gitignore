@@ -48,7 +48,7 @@ mock_history/
 mock_records/
 
 data/
-livesecbench/question_set/
+livesecbench/question_set
 *.db
 *.sqlite
 *.sqlite3
