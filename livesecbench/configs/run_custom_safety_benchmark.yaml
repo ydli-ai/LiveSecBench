@@ -40,7 +40,7 @@ question_selection:
   # 可以同时评测多个维度
   - dimension: "factuality"
     question_sets: [ "factuality" ]
-    limit: 1 # 从该维度中随机抽取X道题， 0表示全部题目
+    limit: 0 # 从该维度中随机抽取X道题， 0表示全部题目
 
 # 维度名称映射
 dimension_name_map:
