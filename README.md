@@ -38,7 +38,7 @@ LiveSecBench 是一个面向中文场景的大模型安全评测基准。框架�
 ```bash
 git clone https://github.com/ydli-ai/LiveSecBench.git
 cd LiveSecBench
-pip install -e .
+python -m pip install -e .
 ```
 
 ### 配置环境变量
@@ -47,15 +47,40 @@ export OPENAI_API_KEY="your_openai_key"
 export DEEPSEEK_API_KEY="your_deepseek_key"
 ```
 
+### 配置评测参数
+编辑配置文件 `livesecbench/configs/run_custom_safety_benchmark.yaml`：
+
+1. **配置待评测模型**：在 `models_to_test` 中修改模型列表为实际模型，确保：
+   - `api_config.api_key` 使用 `env_var:YOUR_API_KEY` 格式与环境变量匹配
+   - `api_config.base_url` 和 `model_id` 设置为正确的 API 端点
+
+2. **配置判别模型**：在 `judge_model_api` 中设置实际判别模型，确保：
+   - `api_key` 使用 `env_var:YOUR_JUDGE_API_KEY` 格式与环境变量匹配
+   - `base_url` 和 `model` 设置为正确的判别模型 API 信息
+
+示例配置：
+```yaml
+models_to_test:
+  - model_name: "Your Model"
+    api_config:
+      base_url: "https://api.example.com/v1"
+      api_key: "env_var:OPENAI_API_KEY"  # 对应环境变量
+      model_id: "gpt-4"
+      
+judge_model_api:
+  base_url: "https://api.deepseek.com/v1"
+  api_key: "env_var:DEEPSEEK_API_KEY"  # 对应环境变量
+  model: "deepseek-chat"
+```
+
 ### 运行评测
 ```bash
-python -m livesecbench.run_livesecbench \
-  --config livesecbench/configs/run_custom_safety_benchmark.yaml
+python livesecbench/run_livesecbench.py --config livesecbench/configs/run_custom_safety_benchmark.yaml
 ```
 
 ### 运行测试
 ```bash
-pip install -e .[test]
+python -m pip install -e .[test]
 pytest -v
 pytest -k config_manager -v  # 仅验证配置解析等模块
 ```
@@ -94,6 +119,8 @@ python scripts/run_mock_e2e.py
 - **[架构文档](./docs/ARCHITECTURE.md)** - 系统架构和设计理念
 - **[API 文档](./docs/API_DOCUMENTATION.md)** - 完整的 API 参考
 - **[使用示例](./docs/EXAMPLES.md)** - 代码示例与最佳实践
+- **[变更记录](./docs/CHANGELOG.md)** - 版本更新历史
+- **[贡献指南](./docs/CONTRIBUTING.md)** - 如何参与项目贡献
 - 论文与技术报告：<https://arxiv.org/abs/2511.02366>
 
 ## 项目结构

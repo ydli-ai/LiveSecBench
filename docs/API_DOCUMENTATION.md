@@ -1,6 +1,6 @@
 # LiveSecBench API 参考
 
-本文档列出在最新代码中最常被复用的 Python API，便于在自定义脚本、CI 流水线或新模块中直接调用核心能力。所有示例默认基于 `pip install -e .` 之后的本地环境。
+本文档列出在最新代码中最常被复用的 Python API，便于在自定义脚本、CI 流水线或新模块中直接调用核心能力。所有示例默认基于 `python -m pip install -e .` 之后的本地环境。
 
 ---
 

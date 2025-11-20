@@ -40,7 +40,7 @@ Scan to join the LiveSecBench WeChat group for the latest updates and technical 
 ```bash
 git clone https://github.com/ydli-ai/LiveSecBench.git
 cd LiveSecBench
-pip install -e .
+python -m pip install -e .
 ```
 
 ### Environment Variables
@@ -49,15 +49,40 @@ export OPENAI_API_KEY="your_openai_key"
 export DEEPSEEK_API_KEY="your_deepseek_key"
 ```
 
+### Configure Evaluation Parameters
+Edit the configuration file `livesecbench/configs/run_custom_safety_benchmark.yaml`:
+
+1. **Configure models to test**: Update the `models_to_test` list with your actual models, ensuring:
+   - `api_config.api_key` uses the `env_var:YOUR_API_KEY` format to match your environment variables
+   - `api_config.base_url` and `model_id` are set to the correct API endpoints
+
+2. **Configure judge model**: Set the actual judge model in `judge_model_api`, ensuring:
+   - `api_key` uses the `env_var:YOUR_JUDGE_API_KEY` format to match your environment variables
+   - `base_url` and `model` are set to the correct judge model API information
+
+Example configuration:
+```yaml
+models_to_test:
+  - model_name: "Your Model"
+    api_config:
+      base_url: "https://api.example.com/v1"
+      api_key: "env_var:OPENAI_API_KEY"  # matches environment variable
+      model_id: "gpt-4"
+      
+judge_model_api:
+  base_url: "https://api.deepseek.com/v1"
+  api_key: "env_var:DEEPSEEK_API_KEY"  # matches environment variable
+  model: "deepseek-chat"
+```
+
 ### Run an Evaluation
 ```bash
-python -m livesecbench.run_livesecbench \
-  --config livesecbench/configs/run_custom_safety_benchmark.yaml
+python livesecbench/run_livesecbench.py --config livesecbench/configs/run_custom_safety_benchmark.yaml
 ```
 
 ### Run Tests
 ```bash
-pip install -e .[test]
+python -m pip install -e .[test]
 pytest -v
 pytest -k config_manager -v  # focus on config parsing, no external calls
 ```
@@ -100,6 +125,8 @@ Result paths are configurable, so CI jobs can redirect outputs to temporary dire
 - **[Architecture Documentation](./docs/ARCHITECTURE.md)** - Design and component breakdown
 - **[API Documentation](./docs/API_DOCUMENTATION.md)** - Full API reference
 - **[Usage Examples](./docs/EXAMPLES.md)** - Sample workflows and best practices
+- **[Changelog](./docs/CHANGELOG.md)** - Version history and release notes
+- **[Contributing Guide](./docs/CONTRIBUTING.md)** - How to contribute to the project
 - Paper & tech report: <https://arxiv.org/abs/2511.02366>
 
 ## Project Structure

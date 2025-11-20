@@ -4,7 +4,7 @@ version = "0.0.1"
 description = "LiveSecBench - 大模型动态安全基准测试框架"
 readme = "README.md"
 requires-python = ">=3.10"
-license = {text = "MIT"}
+license = {text = "Apache License 2.0"}
 authors = [
     {name = "liyudong", email = "liyudong@tsinghua.edu.cn"},
     {name = "wangkecheng", email = "wangkecheng@intokentech.cn"}
@@ -23,7 +23,7 @@ classifiers = [
 
 # 核心运行依赖
 dependencies = [
-    "httpx>=0.28.1",
+    "httpx[http2]>=0.28.1",
     "json-repair>=0.53.0",
     "numpy>=2.2.6",
     "pandas>=2.3.3",
@@ -53,9 +53,18 @@ Homepage = "https://github.com/ydli-ai/LiveSecBench"
 Repository = "https://github.com/ydli-ai/LiveSecBench.git"
 Documentation = "https://github.com/ydli-ai/LiveSecBench/-/tree/main/docs"
 
+# 构建系统配置
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
 # ============================================================================
 # 工具配置
 # ============================================================================
+
+# setuptools 最小配置
+[tool.setuptools]
+packages = ["livesecbench"]
 
 # pytest 配置
 [tool.pytest.ini_options]
