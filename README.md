@@ -119,6 +119,8 @@ python scripts/run_mock_e2e.py
 - **[架构文档](./docs/ARCHITECTURE.md)** - 系统架构和设计理念
 - **[API 文档](./docs/API_DOCUMENTATION.md)** - 完整的 API 参考
 - **[使用示例](./docs/EXAMPLES.md)** - 代码示例与最佳实践
+- **[变更记录](./docs/CHANGELOG.md)** - 版本更新历史
+- **[贡献指南](./docs/CONTRIBUTING.md)** - 如何参与项目贡献
 - 论文与技术报告：<https://arxiv.org/abs/2511.02366>
 
 ## 项目结构
