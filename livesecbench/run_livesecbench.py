@@ -10,6 +10,7 @@ from livesecbench.core.run_model_answer import batch_gen_llm_answer
 from livesecbench.core.run_scoring import launch_evaluation
 from livesecbench.infra.config import ConfigManager
 from livesecbench.utils.logger import configure_root_logger, get_logger
+from livesecbench.utils.env_loader import load_project_env
 
 configure_root_logger(level='INFO', log_to_file=True, log_to_console=True)
 logger = get_logger(__name__)
@@ -99,6 +100,8 @@ def load_models_from_config_manager(config_manager: ConfigManager) -> list:
 
 
 def main():
+    load_project_env()
+    
     parser = argparse.ArgumentParser(description="LiveSecBench评估框架主程序")
     parser.add_argument('--config', type=str, required=True, help='评测任务的YAML配置文件路径')
     args = parser.parse_args()

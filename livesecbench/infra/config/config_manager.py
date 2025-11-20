@@ -45,8 +45,12 @@ class ConfigManager:
         if isinstance(value, str) and value.startswith("env_var:"):
             env_key = value[8:]  # 移除 "env_var:" 前缀
             env_value = os.getenv(env_key)
-            if env_value is None:
-                raise ValueError(f"环境变量 {env_key} 未设置")
+            if env_value is None or env_value.strip() == "":
+                raise ValueError(
+                    f"环境变量 {env_key} 未设置或为空。"
+                    f"请确保已设置环境变量或创建 .env 文件。"
+                    f"当前工作目录: {os.getcwd()}"
+                )
             return env_value
         return value
     
