@@ -1,0 +1,107 @@
+[project]
+name = "livesecbench"
+version = "0.0.1"
+description = "LiveSecBench - 大模型动态安全基准测试框架"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+authors = [
+    {name = "liyudong", email = "liyudong@tsinghua.edu.cn"},
+    {name = "wangkecheng", email = "wangkecheng@intokentech.cn"}
+]
+keywords = ["security", "benchmark", "testing", "llm", "evaluation"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Topic :: Software Development :: Testing",
+    "Topic :: Security",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+
+# 核心运行依赖
+dependencies = [
+    "httpx>=0.28.1",
+    "json-repair>=0.53.0",
+    "numpy>=2.2.6",
+    "pandas>=2.3.3",
+    "python-dotenv>=1.2.1",
+    "PyYAML>=6.0.3",
+    "openpyxl>=3.1.0",
+]
+
+[project.optional-dependencies]
+# 测试依赖
+test = [
+    "pytest>=9.0.1",
+    "pytest-cov>=7.0.0",
+    "pytest-asyncio>=0.24.0",
+]
+
+# 开发依赖（包含测试）
+dev = [
+    "livesecbench[test]",
+]
+
+[project.scripts]
+livesecbench = "livesecbench.run_livesecbench:main"
+
+[project.urls]
+Homepage = "https://github.com/ydli-ai/LiveSecBench"
+Repository = "https://github.com/ydli-ai/LiveSecBench.git"
+Documentation = "https://github.com/ydli-ai/LiveSecBench/-/tree/main/docs"
+
+# ============================================================================
+# 工具配置
+# ============================================================================
+
+# pytest 配置
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = [
+    "-v",
+    "--tb=short",
+    "--strict-markers",
+    "--disable-warnings",
+]
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "integration: marks tests as integration tests",
+    "unit: marks tests as unit tests",
+]
+minversion = "6.0"
+asyncio_mode = "auto"
+
+# 覆盖率选项说明：
+# 需要安装 pytest-cov 后手动指定覆盖率参数：
+# pytest --cov=livesecbench --cov-report=html --cov-report=term-missing
+
+# 覆盖率配置
+[tool.coverage.run]
+source = ["livesecbench"]
+omit = [
+    "*/tests/*",
+    "*/test_*.py",
+    "*/__pycache__/*",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "def __str__",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+    "class .*\\bProtocol\\):",
+    "@(abc\\.)?abstractmethod",
+]
+precision = 2
+show_missing = true
+

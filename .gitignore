@@ -1,0 +1,76 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+*.egg
+.venv/
+venv/
+ENV/
+env/
+.pytest_cache/
+.coverage
+htmlcov/
+*.cover
+.hypothesis/
+
+# Log
+*.log
+*.log.*
+*.jsonl
+*_strict.jsonl
+
+# Editor
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# Project specific
+results/
+mock_results/
+mock_history/
+mock_records/
+
+data/
+livesecbench/question_set/
+*.db
+*.sqlite
+*.sqlite3
+wandb/
+output/
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
+livesecbench.egg-info/
+
+# Test coverage
+htmlcov/
+.coverage
+.pytest_cache/
+
+# Backup files
+*.bak
+*.backup
+*~
+
+# Other
+*.pkl
+*.pickle

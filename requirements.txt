@@ -1,0 +1,12 @@
+# LiveSecBench 核心依赖
+# 从 pyproject.toml 提取，便于快速安装
+httpx>=0.28.1
+json-repair>=0.53.0
+numpy>=2.2.6
+pandas>=2.3.3
+python-dotenv>=1.2.1
+PyYAML>=6.0.3
+pytest>=9.0.1
+pytest-cov>=7.0.0
+pytest-asyncio>=0.24.0
+openpyxl>=3.1.0  # 用于导出Excel文件（PK详情记录）
