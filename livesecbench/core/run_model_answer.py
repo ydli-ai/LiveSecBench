@@ -34,6 +34,7 @@ async def single_question_call(
         model_error_handlers: Optional[Dict[str, str]] = None,
         provider_ignore: Optional[list] = None,
         endpoint: str = "chat/completions",
+        use_structured_content: bool = False,
 ) -> Dict[str, Any]:
     """测试单个问题，获取模型的回答"""
     prompt = input_data.get('question_text') or input_data.get('prompt', '')
@@ -65,6 +66,15 @@ async def single_question_call(
                     "content": [
                         {"type": "text", "text": prompt},
                         {"type": "image_url", "image_url": {"url": data_url}}
+                    ]
+                }
+            ]
+        elif use_structured_content:
+            messages = [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": prompt}
                     ]
                 }
             ]
@@ -264,6 +274,7 @@ async def batch_test_model(
     semaphore = asyncio.Semaphore(max_concurrent)
     is_reasoning_model = model_item.get('is_reasoning', False)
     enable_image_text = model_item.get('image_text_input', False)
+    use_structured_content = model_item.get('use_structured_content', False)
     
     task_to_info = {}
     tasks = []
@@ -287,6 +298,7 @@ async def batch_test_model(
             model_error_handlers=model_error_handlers,
             provider_ignore=provider_ignore,
             endpoint=endpoint,
+            use_structured_content=use_structured_content,
         )
         task = asyncio.create_task(coro)
         tasks.append(task)

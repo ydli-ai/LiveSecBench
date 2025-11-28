@@ -7,6 +7,7 @@ models_to_test:
     organization: "DemoOrg"
     is_reasoning: false
     image_text_input: false
+    use_structured_content: false
     api_config:
       base_url: "https://mock-alpha.api"  # API 端点
       end_point: "/chat/completions"  # API 路由
@@ -18,6 +19,7 @@ models_to_test:
     organization: "DemoOrg"
     is_reasoning: true
     image_text_input: false
+    use_structured_content: false
     api_config:
       base_url: "https://mock-beta.api"  # API 端点
       end_point: "/chat/completions"  # API 路由
