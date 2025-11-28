@@ -99,6 +99,7 @@ async def pk(
     answer_A: str,
     answer_B: str,
     true_answer: Optional[str] = None,
+    endpoint: str = "chat/completions",
 ) -> Tuple[Optional[str], bool, float, Optional[str], Dict[str, Any]]:
     """进行模型A和模型B的PK，返回获胜模型"""
     output_A = f'<think>{reasoning_A}</think>\n\n{answer_A}' if reasoning_A is not None else answer_A
@@ -133,7 +134,7 @@ async def pk(
     
     try:
         output = await http_client.post(
-            endpoint="chat/completions",
+            endpoint=endpoint,
             json_data=req_data,
             context_name="PK判别模型"
         )
@@ -197,6 +198,7 @@ def create_pk_runner(
     timeout = judge_api_config.get('timeout', 120)
     max_retries = judge_api_config.get('max_retries', 5)
     retry_delay = judge_api_config.get('retry_delay', 1)
+    endpoint = judge_api_config.get('end_point', 'chat/completions')
     
     if not base_url or not api_key:
         raise ValueError("judge_model_api 缺少必要的 base_url 或 api_key 配置")
@@ -236,6 +238,7 @@ def create_pk_runner(
             answer_A=answer_A,
             answer_B=answer_B,
             true_answer=true_answer,
+            endpoint=endpoint,
         )
     return pk_wrapper
 

@@ -12,10 +12,12 @@ models_to_test:
     location: "海外"
     calling_method: "API"
     is_reasoning: false
+    image_text_input: false
     open_source: false
     publish_time: "2024/01/01"
     api_config:
       base_url: "https://mock-alpha.api/v1"  # API 端点（支持 env_var: 格式）
+      end_point: "/chat/completions"  # API 路由（可自定义）
       api_key: "env_var:MOCK_ALPHA_API_KEY"  # API 密钥（支持 env_var: 格式）
       model_id: "mock-alpha"  # 模型ID
       provider: "mock-provider"  # 供应商
@@ -26,10 +28,12 @@ models_to_test:
     location: "国内"
     calling_method: "API"
     is_reasoning: true
+    image_text_input: false
     open_source: true
     publish_time: "2024/02/01"
     api_config:
       base_url: "https://mock-beta.api/v1"  # API 端点（支持 env_var: 格式）
+      end_point: "/chat/completions"  # API 路由（可自定义）
       api_key: "env_var:MOCK_BETA_API_KEY"  # API 密钥（支持 env_var: 格式）
       model_id: "mock-beta"  # 模型ID
       provider: "mock-provider"  # 供应商

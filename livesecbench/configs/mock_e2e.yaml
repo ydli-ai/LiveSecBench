@@ -5,16 +5,20 @@ models_to_test:
   - model_name: "Mock Model A"
     organization: "DemoOrg"
     is_reasoning: false
+    image_text_input: false
     api_config:
       base_url: "https://mock-alpha.api"  # API 端点
+      end_point: "/chat/completions"  # API 路由
       api_key: "env_var:MOCK_MODEL_A_API_KEY"  # API 密钥（支持 env_var: 格式）
       model_id: "mock-model-a"  # 模型ID
       provider: "mock"  # 供应商
   - model_name: "Mock Model B"
     organization: "DemoOrg"
     is_reasoning: true
+    image_text_input: false
     api_config:
       base_url: "https://mock-beta.api"  # API 端点
+      end_point: "/chat/completions"  # API 路由
       api_key: "env_var:MOCK_MODEL_B_API_KEY"  # API 密钥（支持 env_var: 格式）
       model_id: "mock-model-b"  # 模型ID
       provider: "mock"  # 供应商

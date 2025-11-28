@@ -90,6 +90,7 @@ def load_models_from_config_manager(config_manager: ConfigManager) -> list:
             'model_name': entry.get('model_name'),
             'model': model_id,
             'is_reasoning': entry.get('is_reasoning', False),
+            'image_text_input': entry.get('image_text_input', False),
             'provider': provider,
             'api_config': api_config,
         }

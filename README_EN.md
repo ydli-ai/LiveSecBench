@@ -55,6 +55,8 @@ Edit the configuration file `livesecbench/configs/run_custom_safety_benchmark.ya
 1. **Configure models to test**: Update the `models_to_test` list with your actual models, ensuring:
    - `api_config.api_key` uses the `env_var:YOUR_API_KEY` format to match your environment variables
    - `api_config.base_url` and `model_id` are set to the correct API endpoints
+   - `api_config.end_point` points to the actual API route (default `/chat/completions`)
+   - `image_text_input` indicates whether the model expects multimodal (image+text) prompts
 
 2. **Configure judge model**: Set the actual judge model in `judge_model_api`, ensuring:
    - `api_key` uses the `env_var:YOUR_JUDGE_API_KEY` format to match your environment variables
@@ -64,8 +66,10 @@ Example configuration:
 ```yaml
 models_to_test:
   - model_name: "Your Model"
+    image_text_input: false
     api_config:
       base_url: "https://api.example.com/v1"
+      end_point: "/chat/completions"
       api_key: "env_var:OPENAI_API_KEY"  # matches environment variable
       model_id: "gpt-4"
       

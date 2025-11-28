@@ -33,6 +33,7 @@ async def single_question_call(
         image_path: Optional[str] = None,
         model_error_handlers: Optional[Dict[str, str]] = None,
         provider_ignore: Optional[list] = None,
+        endpoint: str = "chat/completions",
 ) -> Dict[str, Any]:
     """测试单个问题，获取模型的回答"""
     prompt = input_data.get('question_text') or input_data.get('prompt', '')
@@ -86,7 +87,7 @@ async def single_question_call(
 
         async with semaphore:
             output = await http_client.post(
-                endpoint="chat/completions",
+                endpoint=endpoint,
                 json_data=req_data,
                 context_name=f"模型 {model_name}"
             )
@@ -212,6 +213,7 @@ async def batch_test_model(
     api_key = api_config.get('api_key')
     model_id = api_config.get('model_id')
     provider_ignore = api_config.get('provider_ignore')
+    endpoint = api_config.get('end_point', 'chat/completions')
     
     if not base_url:
         logger.error(f"模型 {model_item.get('model_name')} 的 api_config 缺少 base_url")
@@ -261,10 +263,17 @@ async def batch_test_model(
 
     semaphore = asyncio.Semaphore(max_concurrent)
     is_reasoning_model = model_item.get('is_reasoning', False)
+    enable_image_text = model_item.get('image_text_input', False)
     
     task_to_info = {}
     tasks = []
     for idx, item in enumerate(pending_questions, 1):
+        image_path = None
+        if enable_image_text:
+            image_path = item.get('image_path') or item.get('image_url')
+            if not image_path:
+                metadata = item.get('metadata') or {}
+                image_path = metadata.get('image_path') or metadata.get('image_url')
         coro = single_question_call(
             http_client=http_client,
             semaphore=semaphore,
@@ -274,8 +283,10 @@ async def batch_test_model(
             storage=storage,
             reasoning_enabled=reasoning_enabled,
             is_reasoning_model=is_reasoning_model,
+            image_path=image_path,
             model_error_handlers=model_error_handlers,
             provider_ignore=provider_ignore,
+            endpoint=endpoint,
         )
         task = asyncio.create_task(coro)
         tasks.append(task)
