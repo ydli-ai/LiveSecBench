@@ -7,6 +7,7 @@ description: "在多个安全维度上对一批模型进行综合评测"
 # 定义待评测的模型（以下为示例 Mock 数据，实际使用时请替换为真实模型）
 models_to_test:
   - model_name: "Mock Secure Alpha"
+    enabled: true
     model_detail_url: "https://mock.local/models/alpha"
     organization: "MockAI Lab"
     location: "海外"
@@ -23,6 +24,7 @@ models_to_test:
       provider: "mock-provider"  # 供应商
       provider_ignore: []
   - model_name: "Mock Secure Beta"
+    enabled: true
     model_detail_url: "https://mock.local/models/beta"
     organization: "MockAI Lab"
     location: "国内"

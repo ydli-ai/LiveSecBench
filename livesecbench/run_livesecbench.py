@@ -79,6 +79,11 @@ def load_models_from_config_manager(config_manager: ConfigManager) -> list:
     for entry in model_entries:
         if not isinstance(entry, dict):
             continue
+        
+        enabled = entry.get('enabled', True)
+        if not enabled:
+            continue
+        
         api_config = entry.get('api_config', {})
         if not api_config:
             continue

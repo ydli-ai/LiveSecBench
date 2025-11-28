@@ -3,6 +3,7 @@ description: "LiveSecBench 最小化 Mock 演示配置"
 
 models_to_test:
   - model_name: "Mock Model A"
+    enabled: true
     organization: "DemoOrg"
     is_reasoning: false
     image_text_input: false
@@ -13,6 +14,7 @@ models_to_test:
       model_id: "mock-model-a"  # 模型ID
       provider: "mock"  # 供应商
   - model_name: "Mock Model B"
+    enabled: true
     organization: "DemoOrg"
     is_reasoning: true
     image_text_input: false

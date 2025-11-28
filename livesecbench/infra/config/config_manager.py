@@ -58,6 +58,9 @@ class ConfigManager:
         """遍历模型配置，生成 {api_model_id -> model_name} 映射"""
         name_map: Dict[str, str] = {}
         for model in self._config.get('models_to_test', []) or []:
+            enabled = model.get('enabled', True)
+            if not enabled:
+                continue
             api_config = model.get('api_config', {}) or {}
             model_id = api_config.get('model_id')
             if not model_id:
@@ -94,6 +97,9 @@ class ConfigManager:
         """获取所有模型ID列表"""
         model_ids = []
         for model_config in self.get_models_to_test():
+            enabled = model_config.get('enabled', True)
+            if not enabled:
+                continue
             api_config = model_config.get('api_config', {})
             model_id = api_config.get('model_id')
             if model_id:
@@ -104,6 +110,9 @@ class ConfigManager:
         """获取推理模型ID列表"""
         reasoning_models = []
         for model_config in self.get_models_to_test():
+            enabled = model_config.get('enabled', True)
+            if not enabled:
+                continue
             if model_config.get('is_reasoning', False):
                 api_config = model_config.get('api_config', {})
                 model_id = api_config.get('model_id')
