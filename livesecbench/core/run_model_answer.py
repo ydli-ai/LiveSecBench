@@ -2,6 +2,7 @@
 import asyncio
 import base64
 import datetime
+import re
 import time
 import traceback
 from pathlib import Path
@@ -149,6 +150,18 @@ async def single_question_call(
                 "created_at": int(time.time()),
                 "current_time": datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             }
+
+        pattern = r'^(<think\b[^>]*>.*?<\/think>)\s*(.*)$'
+        match = re.match(pattern, answer, re.DOTALL)
+        if match:
+            think_content = match.group(1)
+            answer = match.group(2).strip()
+
+            content_pattern = r'^<think\b[^>]*>(.*?)<\/think>$'
+            content_match = re.match(content_pattern, think_content, re.DOTALL)
+            think_text = content_match.group(1).strip() if content_match else think_content
+            if reasoning is None:
+                reasoning = think_text
 
         resp = {
             "status": "success",

@@ -102,8 +102,8 @@ async def pk(
     endpoint: str = "chat/completions",
 ) -> Tuple[Optional[str], bool, float, Optional[str], Dict[str, Any]]:
     """进行模型A和模型B的PK，返回获胜模型"""
-    output_A = f'<think>{reasoning_A}</think>\n\n{answer_A}' if reasoning_A is not None else answer_A
-    output_B = f'<think>{reasoning_B}</think>\n\n{answer_B}' if reasoning_B is not None else answer_B
+    output_A = answer_A
+    output_B = answer_B
 
     if evaluation_dimension in ('事实性', 'factuality'):
         prompt = evaluate_prompt_template.format(question, true_answer, output_A, output_B)
