@@ -19,20 +19,32 @@ logger = get_logger(__name__)
 
 
 class RateLimiter:
-    """速率限制器，支持每秒请求数、每分钟请求数和每分钟Token数（TPM）限制"""
+    """速率限制器，支持每秒请求数、每分钟请求数和每分钟Token数（TPM）限制
     
-    def __init__(self, per_second: int = 0, per_minute: int = 0, tokens_per_minute: int = 0):
+    TPM限流采用预估策略：
+    - acquire 时预先占用估算的 token 额度
+    - register_tokens 时用实际消耗替换预估值
+    """
+    
+    def __init__(self, per_second: int = 0, per_minute: int = 0, tokens_per_minute: int = 0, estimated_tokens_per_request: int = 4000):
         self.per_second = per_second
         self.per_minute = per_minute
         self.tokens_per_minute = tokens_per_minute
+        self.estimated_tokens_per_request = estimated_tokens_per_request
         self.second_timestamps = deque()
         self.minute_timestamps = deque()
-        self.token_timestamps = deque()  # (timestamp, tokens)
+        self.token_timestamps = deque()  # (timestamp, tokens, is_estimated)
         self.token_sum = 0
         self.lock = asyncio.Lock()
+        self.pending_estimates = 0
 
     async def acquire(self) -> None:
-        """获取令牌，如果需要等待则在锁外等待，避免阻塞其他协程"""
+        """获取令牌，如果需要等待则在锁外等待，避免阻塞其他协程
+        
+        对于TPM限流，采用预估策略：
+        - 预先占用 estimated_tokens_per_request 的额度
+        - 防止高并发时瞬间超过限制
+        """
         if self.per_second == 0 and self.per_minute == 0 and self.tokens_per_minute == 0:
             return
 
@@ -45,38 +57,63 @@ class RateLimiter:
                 while self.minute_timestamps and now - self.minute_timestamps[0] >= 60.0:
                     self.minute_timestamps.popleft()
                 while self.token_timestamps and now - self.token_timestamps[0][0] >= 60.0:
-                    ts, tokens = self.token_timestamps.popleft()
+                    ts, tokens, is_estimated = self.token_timestamps.popleft()
                     self.token_sum -= tokens
+                    if is_estimated:
+                        self.pending_estimates -= 1
 
                 wait_time = 0.0
                 if 0 < self.per_second <= len(self.second_timestamps):
                     wait_time = max(wait_time, 1.0 - (now - self.second_timestamps[0]))
                 if 0 < self.per_minute <= len(self.minute_timestamps):
                     wait_time = max(wait_time, 60.0 - (now - self.minute_timestamps[0]))
-                if 0 < self.tokens_per_minute <= self.token_sum and self.token_timestamps:
-                    oldest_ts, _ = self.token_timestamps[0]
-                    wait_time = max(wait_time, 60.0 - (now - oldest_ts))
+                if self.tokens_per_minute > 0:
+                    estimated_total = self.token_sum + self.estimated_tokens_per_request
+                    if estimated_total > self.tokens_per_minute and self.token_timestamps:
+                        oldest_ts, _, _ = self.token_timestamps[0]
+                        wait_time = max(wait_time, 60.0 - (now - oldest_ts))
 
                 if wait_time == 0:
                     if self.per_second > 0:
                         self.second_timestamps.append(now)
                     if self.per_minute > 0:
                         self.minute_timestamps.append(now)
+                    
+                    if self.tokens_per_minute > 0:
+                        self.token_timestamps.append((now, self.estimated_tokens_per_request, True))
+                        self.token_sum += self.estimated_tokens_per_request
+                        self.pending_estimates += 1
+                    
                     return
 
             await asyncio.sleep(wait_time)
 
     async def register_tokens(self, tokens: int) -> None:
         """在请求完成后登记本次消耗的tokens，用于TPM限流"""
-        if self.tokens_per_minute <= 0 or tokens <= 0:
+        if self.tokens_per_minute <= 0:
             return
+        
         async with self.lock:
             now = time.time()
             while self.token_timestamps and now - self.token_timestamps[0][0] >= 60.0:
-                ts, old_tokens = self.token_timestamps.popleft()
+                ts, old_tokens, is_estimated = self.token_timestamps.popleft()
                 self.token_sum -= old_tokens
-            self.token_timestamps.append((now, int(tokens)))
-            self.token_sum += int(tokens)
+                if is_estimated:
+                    self.pending_estimates -= 1
+            
+            if self.pending_estimates > 0:
+                for i in range(len(self.token_timestamps) - 1, -1, -1):
+                    ts, old_tokens, is_estimated = self.token_timestamps[i]
+                    if is_estimated:
+                        self.token_sum -= old_tokens
+                        self.token_sum += int(tokens)
+                        self.token_timestamps[i] = (ts, int(tokens), False)
+                        self.pending_estimates -= 1
+                        break
+            else:
+                if tokens > 0:
+                    self.token_timestamps.append((now, int(tokens), False))
+                    self.token_sum += int(tokens)
 
 
 class RetryableHTTPClient:
@@ -275,6 +312,14 @@ class RetryableHTTPClient:
                     tokens_used = usage.get('total_tokens', 0)
                     if tokens_used > 0:
                         await self.rate_limiter.register_tokens(tokens_used)
+                        estimated = getattr(self.rate_limiter, "estimated_tokens_per_request", 0)
+                        if estimated > 0:
+                            diff_percent = ((tokens_used - estimated) / estimated) * 100
+                            if abs(diff_percent) > 20:  # 偏差超过20%时记录警告
+                                logger.debug(
+                                    f"{context_name}token消耗: 实际={tokens_used}, "
+                                    f"预估={estimated}, 偏差={diff_percent:+.1f}%"
+                                )
 
                 return output
                 

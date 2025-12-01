@@ -242,6 +242,7 @@ async def batch_test_model(
     model_max_concurrent = api_config.get('max_concurrent') or max_concurrent
     model_rpm = api_config.get('rpm') or global_rate_limit_per_minute
     model_tpm = api_config.get('tpm') or global_tpm
+    model_estimated_tokens = api_config.get('estimated_tokens_per_request', 4000)
     
     if not base_url:
         logger.error(f"模型 {model_item.get('model_name')} 的 api_config 缺少 base_url")
@@ -261,6 +262,7 @@ async def batch_test_model(
             per_second=global_rate_limit_per_second,
             per_minute=model_rpm,
             tokens_per_minute=model_tpm,
+            estimated_tokens_per_request=model_estimated_tokens,
         )
         limit_info = []
         if global_rate_limit_per_second > 0:
@@ -268,7 +270,7 @@ async def batch_test_model(
         if model_rpm > 0:
             limit_info.append(f"每分钟={model_rpm}请求")
         if model_tpm > 0:
-            limit_info.append(f"每分钟={model_tpm}tokens")
+            limit_info.append(f"每分钟={model_tpm}tokens (预估每请求={model_estimated_tokens}tokens)")
         logger.info(
             f"模型 {model_item.get('model_name')} 启用速率限制: {', '.join(limit_info)}"
         )
