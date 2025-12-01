@@ -252,6 +252,11 @@ class RetryableHTTPClient:
                 if status_code >= 500:
                     error_text = response.text
                     logger.warning(f"{context_name}服务器错误 status={status_code}, body={error_text}")
+                    output = json.loads(error_text, strict=False)
+                    if 'error' in output and 'code' in output['error']:
+                        error_code = output['error']['code']
+                        if error_code and error_code == "10013":
+                            return output['error']
                     if attempt < self.max_retries - 1:
                         wait_time = self.retry_delay * (2 ** attempt)
                         logger.info(f"等待 {wait_time:.2f}s 后重试{context_name}...")
