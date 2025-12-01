@@ -239,7 +239,7 @@ class RetryableHTTPClient:
                     output = json.loads(error_text, strict=False)
                     if 'error' in output and 'code' in output['error']:
                         error_code = output['error']['code']
-                        if error_code and error_code in ["data_inspection_failed", 18]:
+                        if error_code and error_code in ["data_inspection_failed", 18, "no_response_from_channel"]:
                             return output['error']
                     response.raise_for_status()
                 
@@ -250,6 +250,10 @@ class RetryableHTTPClient:
                     if 'error' in output and 'code' in output['error']:
                         error_code = output['error']['code']
                         if error_code and error_code == 403:
+                            return output['error']
+                    if 'error' in output and 'type' in output['error']:
+                        type = output['error']['type']
+                        if type and type == "censorship_blocked":
                             return output['error']
                     if attempt < self.max_retries - 1:
                         wait_time = self.retry_delay * (2 ** attempt)
