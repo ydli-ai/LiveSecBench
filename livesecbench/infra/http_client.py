@@ -19,18 +19,21 @@ logger = get_logger(__name__)
 
 
 class RateLimiter:
-    """速率限制器，支持每秒和每分钟限制"""
+    """速率限制器，支持每秒请求数、每分钟请求数和每分钟Token数（TPM）限制"""
     
-    def __init__(self, per_second: int = 0, per_minute: int = 0):
+    def __init__(self, per_second: int = 0, per_minute: int = 0, tokens_per_minute: int = 0):
         self.per_second = per_second
         self.per_minute = per_minute
+        self.tokens_per_minute = tokens_per_minute
         self.second_timestamps = deque()
         self.minute_timestamps = deque()
+        self.token_timestamps = deque()  # (timestamp, tokens)
+        self.token_sum = 0
         self.lock = asyncio.Lock()
 
     async def acquire(self) -> None:
         """获取令牌，如果需要等待则在锁外等待，避免阻塞其他协程"""
-        if self.per_second == 0 and self.per_minute == 0:
+        if self.per_second == 0 and self.per_minute == 0 and self.tokens_per_minute == 0:
             return
 
         while True:
@@ -41,12 +44,18 @@ class RateLimiter:
                     self.second_timestamps.popleft()
                 while self.minute_timestamps and now - self.minute_timestamps[0] >= 60.0:
                     self.minute_timestamps.popleft()
+                while self.token_timestamps and now - self.token_timestamps[0][0] >= 60.0:
+                    ts, tokens = self.token_timestamps.popleft()
+                    self.token_sum -= tokens
 
                 wait_time = 0.0
                 if 0 < self.per_second <= len(self.second_timestamps):
                     wait_time = max(wait_time, 1.0 - (now - self.second_timestamps[0]))
                 if 0 < self.per_minute <= len(self.minute_timestamps):
                     wait_time = max(wait_time, 60.0 - (now - self.minute_timestamps[0]))
+                if 0 < self.tokens_per_minute <= self.token_sum and self.token_timestamps:
+                    oldest_ts, _ = self.token_timestamps[0]
+                    wait_time = max(wait_time, 60.0 - (now - oldest_ts))
 
                 if wait_time == 0:
                     if self.per_second > 0:
@@ -56,6 +65,18 @@ class RateLimiter:
                     return
 
             await asyncio.sleep(wait_time)
+
+    async def register_tokens(self, tokens: int) -> None:
+        """在请求完成后登记本次消耗的tokens，用于TPM限流"""
+        if self.tokens_per_minute <= 0 or tokens <= 0:
+            return
+        async with self.lock:
+            now = time.time()
+            while self.token_timestamps and now - self.token_timestamps[0][0] >= 60.0:
+                ts, old_tokens = self.token_timestamps.popleft()
+                self.token_sum -= old_tokens
+            self.token_timestamps.append((now, int(tokens)))
+            self.token_sum += int(tokens)
 
 
 class RetryableHTTPClient:
@@ -249,6 +270,12 @@ class RetryableHTTPClient:
                     else:
                         raise RuntimeError(f"{context_name}返回错误：{error_message}")
                 
+                if self.rate_limiter and getattr(self.rate_limiter, "tokens_per_minute", 0) > 0:
+                    usage = output.get('usage', {}) if isinstance(output, dict) else {}
+                    tokens_used = usage.get('total_tokens', 0)
+                    if tokens_used > 0:
+                        await self.rate_limiter.register_tokens(tokens_used)
+
                 return output
                 
             except (httpx.ConnectError, httpx.ReadTimeout, httpx.WriteTimeout, httpx.PoolTimeout) as e:

@@ -210,7 +210,9 @@ async def batch_test_model(
         reasoning_enabled: bool = True,
         max_retries: int = 5,
         retry_delay: int = 1,
-        rate_limiter: Optional[RateLimiter] = None,
+        global_rate_limit_per_second: int = 0,
+        global_rate_limit_per_minute: int = 0,
+        global_tpm: int = 0,
         model_error_handlers: Optional[Dict] = None,
 ) -> None:
     """批量测试模型"""
@@ -224,6 +226,9 @@ async def batch_test_model(
     model_id = api_config.get('model_id')
     provider_ignore = api_config.get('provider_ignore')
     endpoint = api_config.get('end_point', 'chat/completions')
+    model_max_concurrent = api_config.get('max_concurrent') or max_concurrent
+    model_rpm = api_config.get('rpm') or global_rate_limit_per_minute
+    model_tpm = api_config.get('tpm') or global_tpm
     
     if not base_url:
         logger.error(f"模型 {model_item.get('model_name')} 的 api_config 缺少 base_url")
@@ -236,6 +241,22 @@ async def batch_test_model(
         return
     
     model_item['model'] = model_id
+
+    rate_limiter = None
+    if global_rate_limit_per_second > 0 or model_rpm > 0:
+        rate_limiter = RateLimiter(
+            per_second=global_rate_limit_per_second,
+            per_minute=model_rpm,
+        )
+        logger.info(
+            f"模型 {model_item.get('model_name')} 启用速率限制: "
+            f"每秒={global_rate_limit_per_second}, 每分钟={model_rpm}"
+        )
+    if model_tpm:
+        logger.info(
+            f"模型 {model_item.get('model_name')} 配置 TPM={model_tpm} tokens/min "
+            f"(当前仅记录配置，未严格生效)"
+        )
 
     http_client = RetryableHTTPClient(
         base_url=base_url,
@@ -271,7 +292,7 @@ async def batch_test_model(
         logger.info(f"模型 {model_item['model_name']} 所有题目均已缓存，跳过请求。")
         return
 
-    semaphore = asyncio.Semaphore(max_concurrent)
+    semaphore = asyncio.Semaphore(model_max_concurrent)
     is_reasoning_model = model_item.get('is_reasoning', False)
     enable_image_text = model_item.get('image_text_input', False)
     use_structured_content = model_item.get('use_structured_content', False)
@@ -392,14 +413,7 @@ async def batch_gen_llm_answer(
     retry_delay = api_call_settings.get('retry_delay', 1)
     rate_limit_per_second = api_call_settings.get('rate_limit_per_second', 0)
     rate_limit_per_minute = api_call_settings.get('rate_limit_per_minute', 0)
-    
-    rate_limiter = None
-    if rate_limit_per_second > 0 or rate_limit_per_minute > 0:
-        rate_limiter = RateLimiter(
-            per_second=rate_limit_per_second,
-            per_minute=rate_limit_per_minute
-        )
-        logger.info(f"启用速率限制: 每秒={rate_limit_per_second}, 每分钟={rate_limit_per_minute}")
+    tpm = api_call_settings.get('tpm', 0)
     
     model_error_handlers = config_manager.get_model_error_handlers()
     
@@ -417,6 +431,8 @@ async def batch_gen_llm_answer(
             reasoning_enabled=reasoning_enabled,
             max_retries=max_retries,
             retry_delay=retry_delay,
-            rate_limiter=rate_limiter,
+            global_rate_limit_per_second=rate_limit_per_second,
+            global_rate_limit_per_minute=rate_limit_per_minute,
+            global_tpm=tpm,
             model_error_handlers=model_error_handlers,
         )
