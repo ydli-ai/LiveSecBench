@@ -256,19 +256,21 @@ async def batch_test_model(
     model_item['model'] = model_id
 
     rate_limiter = None
-    if global_rate_limit_per_second > 0 or model_rpm > 0:
+    if global_rate_limit_per_second > 0 or model_rpm > 0 or model_tpm > 0:
         rate_limiter = RateLimiter(
             per_second=global_rate_limit_per_second,
             per_minute=model_rpm,
+            tokens_per_minute=model_tpm,
         )
+        limit_info = []
+        if global_rate_limit_per_second > 0:
+            limit_info.append(f"每秒={global_rate_limit_per_second}请求")
+        if model_rpm > 0:
+            limit_info.append(f"每分钟={model_rpm}请求")
+        if model_tpm > 0:
+            limit_info.append(f"每分钟={model_tpm}tokens")
         logger.info(
-            f"模型 {model_item.get('model_name')} 启用速率限制: "
-            f"每秒={global_rate_limit_per_second}, 每分钟={model_rpm}"
-        )
-    if model_tpm:
-        logger.info(
-            f"模型 {model_item.get('model_name')} 配置 TPM={model_tpm} tokens/min "
-            f"(当前仅记录配置，未严格生效)"
+            f"模型 {model_item.get('model_name')} 启用速率限制: {', '.join(limit_info)}"
         )
 
     http_client = RetryableHTTPClient(
@@ -430,12 +432,14 @@ async def batch_gen_llm_answer(
     
     model_error_handlers = config_manager.get_model_error_handlers()
     
+    tasks = []
+    valid_models = []
     for model_item in target_model_list:
         if 'api_config' not in model_item:
             logger.warning(f"模型 {model_item.get('model_name', 'unknown')} 缺少 api_config 配置，跳过")
             continue
 
-        await batch_test_model(
+        task = batch_test_model(
             model_item,
             all_questions,
             storage=storage,
@@ -449,3 +453,19 @@ async def batch_gen_llm_answer(
             global_tpm=tpm,
             model_error_handlers=model_error_handlers,
         )
+        tasks.append(task)
+        valid_models.append(model_item)
+    
+    if tasks:
+        logger.info(f"开始并行测试 {len(tasks)} 个模型")
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        
+        for i, result in enumerate(results):
+            if isinstance(result, Exception):
+                model_name = valid_models[i].get('model_name', 'unknown')
+                logger.error(f"模型 {model_name} 测试过程中发生异常: {result}")
+                traceback.print_exc()
+        
+        logger.info(f"所有模型测试完成")
+    else:
+        logger.warning("没有有效的模型配置，跳过测试")
