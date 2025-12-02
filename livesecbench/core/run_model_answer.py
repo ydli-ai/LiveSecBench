@@ -197,7 +197,7 @@ async def single_question_call(
             })
         return resp
     except Exception as e:
-        traceback.print_exc()
+        logger.error("异常文件: {}，所在行: {}，异常信息: {}".format(e.__traceback__.tb_frame.f_globals.get("__file__", "NULL"), e.__traceback__.tb_lineno, e.args))
         logger.error(f"模型 {model_name} LLM 请求失败: {type(e).__name__} - {e}")
         logger.info(f'model_name: {model_name}')
         logger.info(f'model: {model}')
@@ -351,7 +351,7 @@ async def batch_test_model(
                 category = task_to_info.get(task, (0, {}))[1].get('dimension', 'unknown')
                 error_count += 1
                 logger.error(f"[{idx}/{len(pending_questions)}] ✗ 异常 | 分类: {category} | 错误: {str(result)}")
-                traceback.print_exc()
+                logger.error("异常文件: {}，所在行: {}，异常信息: {}".format(result.__traceback__.tb_frame.f_globals.get("__file__", "NULL"), result.__traceback__.tb_lineno, result.args))
                 continue
             
             if task not in task_to_info:
@@ -394,7 +394,7 @@ async def batch_test_model(
             category = task_to_info.get(task, (0, {}))[1].get('dimension', 'unknown')
             error_count += 1
             logger.error(f"[{idx}/{len(pending_questions)}] ✗ 异常 | 分类: {category} | 错误: {str(e)}")
-            traceback.print_exc()
+            logger.error("异常文件: {}，所在行: {}，异常信息: {}".format(e.__traceback__.tb_frame.f_globals.get("__file__", "NULL"), e.__traceback__.tb_lineno, e.args))
 
     logger.info(f"测试完成: {model_item['model_name']}")
     logger.info(f"总数: {len(questions)} | 成功: {success_count} | 失败: {error_count}")
@@ -466,8 +466,8 @@ async def batch_gen_llm_answer(
             if isinstance(result, Exception):
                 model_name = valid_models[i].get('model_name', 'unknown')
                 logger.error(f"模型 {model_name} 测试过程中发生异常: {result}")
-                traceback.print_exc()
-        
+                logger.error("异常文件: {}，所在行: {}，异常信息: {}".format(result.__traceback__.tb_frame.f_globals.get("__file__", "NULL"), result.__traceback__.tb_lineno, result.args))
+
         logger.info(f"所有模型测试完成")
     else:
         logger.warning("没有有效的模型配置，跳过测试")
