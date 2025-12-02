@@ -43,8 +43,12 @@ class SQLiteStorage:
         return str(value)
 
     def _connect(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(self.db_path, check_same_thread=False)
+        conn = sqlite3.connect(self.db_path, check_same_thread=False, timeout=30)
         conn.row_factory = sqlite3.Row
+        # 启用 WAL 模式以支持更好的并发读写
+        conn.execute("PRAGMA journal_mode=WAL")
+        # 设置繁忙超时（毫秒）
+        conn.execute("PRAGMA busy_timeout=30000")
         return conn
 
     def _ensure_tables(self) -> None:
@@ -170,31 +174,43 @@ class SQLiteStorage:
         data_json = json.dumps(payload, ensure_ascii=False)
         task_id = self.task_id or payload.get("task_id")
 
-        with self._connect() as conn:
-            conn.execute(
-                f"""
-                INSERT INTO {self.model_outputs_table}
-                    (task_id, model_name, model, category, prompt, status, payload_json, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT(model, category, prompt) DO UPDATE SET
-                    task_id=excluded.task_id,
-                    model_name=excluded.model_name,
-                    status=excluded.status,
-                    payload_json=excluded.payload_json,
-                    updated_at=excluded.updated_at;
-                """,
-                (
-                    task_id,
-                    payload.get("model_name"),
-                    model,
-                    category,
-                    prompt,
-                    status,
-                    data_json,
-                    created_ts,
-                    now,
-                ),
-            )
+        max_retries = 5
+        for attempt in range(max_retries):
+            try:
+                with self._connect() as conn:
+                    conn.execute(
+                        f"""
+                        INSERT INTO {self.model_outputs_table}
+                            (task_id, model_name, model, category, prompt, status, payload_json, created_at, updated_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        ON CONFLICT(model, category, prompt) DO UPDATE SET
+                            task_id=excluded.task_id,
+                            model_name=excluded.model_name,
+                            status=excluded.status,
+                            payload_json=excluded.payload_json,
+                            updated_at=excluded.updated_at;
+                        """,
+                        (
+                            task_id,
+                            payload.get("model_name"),
+                            model,
+                            category,
+                            prompt,
+                            status,
+                            data_json,
+                            created_ts,
+                            now,
+                        ),
+                    )
+                    return
+            except sqlite3.OperationalError as e:
+                if "database is locked" in str(e) and attempt < max_retries - 1:
+                    # 指数退避重试
+                    wait_time = 0.1 * (2 ** attempt)
+                    time.sleep(wait_time)
+                    continue
+                else:
+                    raise
 
     async def asave_model_output(self, payload: Dict[str, Any]) -> None:
         await asyncio.to_thread(self._save_model_output_sync, payload)
@@ -241,63 +257,75 @@ class SQLiteStorage:
         )
         task_id = self.task_id or payload.get("task_id")
         
-        with self._connect() as conn:
+        max_retries = 5
+        for attempt in range(max_retries):
             try:
-                conn.execute(
-                    f"""
-                    INSERT INTO {self.pk_results_table}
-                        (task_id, evaluation_dimension, category, question, model_a, model_b, winner, result_json, created_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    ON CONFLICT(category, question, model_a, model_b) DO UPDATE SET
-                        task_id=excluded.task_id,
-                        evaluation_dimension=excluded.evaluation_dimension,
-                        winner=excluded.winner,
-                        result_json=excluded.result_json,
-                        created_at=excluded.created_at;
-                    """,
-                    (
-                        task_id,
-                        evaluation_dimension,
-                        category_val,
-                        question_val,
-                        model_a,
-                        model_b,
-                        payload.get("winner"),
-                        result_json,
-                        created_at,
-                    ),
-                )
-                conn.commit()
-            except Exception as e:
-                import sqlite3
-                if isinstance(e, sqlite3.OperationalError) and "ON CONFLICT" in str(e):
-                    conn.execute(
-                        f"""
-                        DELETE FROM {self.pk_results_table}
-                        WHERE category = ? AND question = ? AND model_a = ? AND model_b = ?
-                        """,
-                        (category_val, question_val, model_a, model_b),
-                    )
-                    # 再插入新记录
-                    conn.execute(
-                        f"""
-                        INSERT INTO {self.pk_results_table}
-                            (task_id, evaluation_dimension, category, question, model_a, model_b, winner, result_json, created_at)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                        """,
-                        (
-                            task_id,
-                            evaluation_dimension,
-                            category_val,
-                            question_val,
-                            model_a,
-                            model_b,
-                            payload.get("winner"),
-                            result_json,
-                            created_at,
-                        ),
-                    )
-                    conn.commit()
+                with self._connect() as conn:
+                    try:
+                        conn.execute(
+                            f"""
+                            INSERT INTO {self.pk_results_table}
+                                (task_id, evaluation_dimension, category, question, model_a, model_b, winner, result_json, created_at)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                            ON CONFLICT(category, question, model_a, model_b) DO UPDATE SET
+                                task_id=excluded.task_id,
+                                evaluation_dimension=excluded.evaluation_dimension,
+                                winner=excluded.winner,
+                                result_json=excluded.result_json,
+                                created_at=excluded.created_at;
+                            """,
+                            (
+                                task_id,
+                                evaluation_dimension,
+                                category_val,
+                                question_val,
+                                model_a,
+                                model_b,
+                                payload.get("winner"),
+                                result_json,
+                                created_at,
+                            ),
+                        )
+                        conn.commit()
+                        return
+                    except Exception as e:
+                        if isinstance(e, sqlite3.OperationalError) and "ON CONFLICT" in str(e):
+                            conn.execute(
+                                f"""
+                                DELETE FROM {self.pk_results_table}
+                                WHERE category = ? AND question = ? AND model_a = ? AND model_b = ?
+                                """,
+                                (category_val, question_val, model_a, model_b),
+                            )
+                            # 再插入新记录
+                            conn.execute(
+                                f"""
+                                INSERT INTO {self.pk_results_table}
+                                    (task_id, evaluation_dimension, category, question, model_a, model_b, winner, result_json, created_at)
+                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                """,
+                                (
+                                    task_id,
+                                    evaluation_dimension,
+                                    category_val,
+                                    question_val,
+                                    model_a,
+                                    model_b,
+                                    payload.get("winner"),
+                                    result_json,
+                                    created_at,
+                                ),
+                            )
+                            conn.commit()
+                            return
+                        else:
+                            raise
+            except sqlite3.OperationalError as e:
+                if "database is locked" in str(e) and attempt < max_retries - 1:
+                    # 指数退避重试
+                    wait_time = 0.1 * (2 ** attempt)
+                    time.sleep(wait_time)
+                    continue
                 else:
                     raise
     
