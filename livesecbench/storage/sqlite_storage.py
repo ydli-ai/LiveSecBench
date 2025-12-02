@@ -63,16 +63,23 @@ class SQLiteStorage:
         """停止后台写入任务"""
         if self.enable_write_queue and self._is_running:
             self._is_running = False
-            
-            # 等待队列清空
-            if self._write_queue and not self._write_queue.empty():
-                logger.info(f"等待队列清空... (剩余: {self._write_queue.qsize()})")
+
+            # 等待队列中现有任务处理完毕
+            if self._write_queue:
+                if not self._write_queue.empty():
+                    logger.info(f"等待队列清空... (剩余: {self._write_queue.qsize()})")
+                # 等待直到所有已入队任务都调用了 task_done
                 await self._write_queue.join()
-            
-            # 停止写入任务
+
+                try:
+                    await self._write_queue.put(None)
+                except Exception as e:
+                    logger.error(f"发送写入循环停止信号失败: {e}")
+
+            # 等待写入任务结束
             if self._writer_task:
                 await self._writer_task
-            
+
             # 停止重试任务
             if self._retry_task:
                 self._retry_task.cancel()
@@ -80,12 +87,16 @@ class SQLiteStorage:
                     await self._retry_task
                 except asyncio.CancelledError:
                     pass
-            
+
             logger.info(f"写入队列已停止")
 
     async def _writer_loop(self):
         """后台写入循环"""
-        while self._is_running:
+        processed_count = 0
+        
+        # 持续从队列中取任务，直到收到 None 停止信号
+        while True:
+            item = None
             try:
                 try:
                     item = await asyncio.wait_for(
@@ -100,23 +111,33 @@ class SQLiteStorage:
                 
                 data_type, payload = item
                 
-                # 尝试写入数据库
                 try:
                     if data_type == 'model_output':
-                        self._save_model_output_sync(payload)
+                        await asyncio.to_thread(self._save_model_output_sync, payload)
                     elif data_type == 'pk_result':
-                        self._save_pk_result_from_queue(payload)
+                        await asyncio.to_thread(self._save_pk_result_from_queue, payload)
+                    
+                    processed_count += 1
+                    if processed_count % 50 == 0:
+                        logger.debug(f"[Queue] 已处理 {processed_count} 项")
                     
                 except Exception as e:
+                    logger.warning(f"数据库写入失败，保存到文件: {type(e).__name__}")
                     await self._save_to_failed_file(data_type, payload, str(e))
-                
-                finally:
-                    self._write_queue.task_done()
                     
             except Exception as e:
                 logger.error(f"✗ 写入队列异常: {e}")
                 import traceback
                 traceback.print_exc()
+            
+            finally:
+                if item is not None:
+                    try:
+                        self._write_queue.task_done()
+                    except Exception as e:
+                        logger.error(f"task_done 失败: {e}")
+        
+        logger.info(f"写入循环结束，共处理 {processed_count} 项")
 
     async def _save_to_failed_file(self, data_type: str, payload: Dict, error: str):
         """将失败的数据保存到文件"""
