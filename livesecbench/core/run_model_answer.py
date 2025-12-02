@@ -114,15 +114,26 @@ async def single_question_call(
         server_model = None
         
         if 'choices' not in output or len(output['choices']) == 0:
-            if model in model_error_handlers:
-                answer = model_error_handlers[model]
-            elif any(model.startswith(prefix) for prefix in ['gemini-2.0-flash']):
-                answer = model_error_handlers.get('gemini-2.0-flash', 'ext. PROHIBITED_CONTENT')
-            elif any(model.startswith(prefix) for prefix in ['x-ai/grok-4-fast', 'x-ai/grok-3-mini']):
-                answer = model_error_handlers.get('x-ai/grok-4-fast', 
-                    'The caller does not have permission to execute the specified operation. Content violates usage guidelines.')
-            elif any(model.startswith(prefix) for prefix in ['Doubao-1.5-pro-32k', 'doubao-seed-1-6']):
-                answer = model_error_handlers.get('Doubao-1.5-pro-32k', '换个问题试试')
+            if 'error' in output:
+                error_info = output['error']
+                if isinstance(error_info, dict):
+                    error_code = error_info.get('code')
+                    error_type = error_info.get('type')
+                    error_message = error_info.get('message', '')
+                    
+                    if error_code == '204' or error_type == 'content_filtered':
+                        answer = error_message or '内容审查：该问题触发了安全过滤'
+    
+            if answer is None:
+                if model in model_error_handlers:
+                    answer = model_error_handlers[model]
+                elif any(model.startswith(prefix) for prefix in ['gemini-2.0-flash']):
+                    answer = model_error_handlers.get('gemini-2.0-flash', 'ext. PROHIBITED_CONTENT')
+                elif any(model.startswith(prefix) for prefix in ['x-ai/grok-4-fast', 'x-ai/grok-3-mini']):
+                    answer = model_error_handlers.get('x-ai/grok-4-fast', 
+                        'The caller does not have permission to execute the specified operation. Content violates usage guidelines.')
+                elif any(model.startswith(prefix) for prefix in ['Doubao-1.5-pro-32k', 'doubao-seed-1-6']):
+                    answer = model_error_handlers.get('Doubao-1.5-pro-32k', '换个问题试试')
         else:
             answer = output['choices'][0]['message']['content']
             if 'reasoning' in output['choices'][0]['message']:
