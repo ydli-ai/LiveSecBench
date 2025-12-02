@@ -47,7 +47,6 @@ async def single_question_call(
     model_error_handlers = model_error_handlers or {}
 
     try:
-        start = time.time()
         
         if image_path:
             if image_path.startswith('http://') or image_path.startswith('https://'):
@@ -97,6 +96,7 @@ async def single_question_call(
                 req_data['provider'] = {'ignore': provider_ignore}
 
         async with semaphore:
+            start = time.time()
             output = await http_client.post(
                 endpoint=endpoint,
                 json_data=req_data,
