@@ -370,9 +370,11 @@ class RetryableHTTPClient:
                         raise
                 else:
                     raise
-                    
+
             except Exception as e:
                 logger.error(f'{context_name}请求异常: {type(e).__name__} - {str(e)}')
+                logger.error("异常文件: {}，所在行: {}，异常信息: {}".format(e.__traceback__.tb_frame.f_globals.get("__file__", "NULL"), e.__traceback__.tb_lineno, e.args))
+                logger.info(f"输入的请求body: {json_data}")
                 if attempt < self.max_retries - 1:
                     wait_time = self.retry_delay * (2 ** attempt)
                     logger.info(f'等待 {wait_time} 秒后重试...')
