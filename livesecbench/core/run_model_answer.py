@@ -286,115 +286,123 @@ async def batch_test_model(
 
     logger.info(f"开始测试模型: {model_item['model_name']} ({model_item['model']}), 题目: {len(questions)}, 并发: {max_concurrent}")
 
+    # 启动写入队列
+    await storage.start()
+    
     success_count = 0
     error_count = 0
     total_time = 0
     pending_questions = []
     skipped_count = 0
 
-    for item in questions:
-        prompt_text = item.get('question_text')
-        category = item.get('dimension')
-        existing = await storage.aget_model_output(model_item['model'], category, prompt_text)
-        if existing and existing.get('status') == 'success':
-            skipped_count += 1
-            success_count += 1
-            continue
-        pending_questions.append(item)
+    try:
+        for item in questions:
+            prompt_text = item.get('question_text')
+            category = item.get('dimension')
+            existing = await storage.aget_model_output(model_item['model'], category, prompt_text)
+            if existing and existing.get('status') == 'success':
+                skipped_count += 1
+                success_count += 1
+                continue
+            pending_questions.append(item)
 
-    if skipped_count:
-        logger.info(f"模型 {model_item['model_name']} 已命中缓存 {skipped_count} 条，跳过重复处理。")
+        if skipped_count:
+            logger.info(f"模型 {model_item['model_name']} 已命中缓存 {skipped_count} 条，跳过重复处理。")
 
-    if not pending_questions:
-        logger.info(f"模型 {model_item['model_name']} 所有题目均已缓存，跳过请求。")
-        return
+        if not pending_questions:
+            logger.info(f"模型 {model_item['model_name']} 所有题目均已缓存，跳过请求。")
+            return
 
-    semaphore = asyncio.Semaphore(model_max_concurrent)
-    is_reasoning_model = model_item.get('is_reasoning', False)
-    enable_image_text = model_item.get('image_text_input', False)
-    use_structured_content = model_item.get('use_structured_content', False)
-    
-    task_to_info = {}
-    tasks = []
-    for idx, item in enumerate(pending_questions, 1):
-        image_path = None
-        if enable_image_text:
-            image_path = item.get('image_path') or item.get('image_url')
-            if not image_path:
-                metadata = item.get('metadata') or {}
-                image_path = metadata.get('image_path') or metadata.get('image_url')
-        coro = single_question_call(
-            http_client=http_client,
-            semaphore=semaphore,
-            model_name=model_item['model_name'],
-            model=model_item['model'],
-            input_data=item,
-            storage=storage,
-            reasoning_enabled=reasoning_enabled,
-            is_reasoning_model=is_reasoning_model,
-            image_path=image_path,
-            model_error_handlers=model_error_handlers,
-            provider_ignore=provider_ignore,
-            endpoint=endpoint,
-            use_structured_content=use_structured_content,
-        )
-        task = asyncio.create_task(coro)
-        tasks.append(task)
-        task_to_info[task] = (idx, item)
+        semaphore = asyncio.Semaphore(model_max_concurrent)
+        is_reasoning_model = model_item.get('is_reasoning', False)
+        enable_image_text = model_item.get('image_text_input', False)
+        use_structured_content = model_item.get('use_structured_content', False)
+        
+        task_to_info = {}
+        tasks = []
+        for idx, item in enumerate(pending_questions, 1):
+            image_path = None
+            if enable_image_text:
+                image_path = item.get('image_path') or item.get('image_url')
+                if not image_path:
+                    metadata = item.get('metadata') or {}
+                    image_path = metadata.get('image_path') or metadata.get('image_url')
+            coro = single_question_call(
+                http_client=http_client,
+                semaphore=semaphore,
+                model_name=model_item['model_name'],
+                model=model_item['model'],
+                input_data=item,
+                storage=storage,
+                reasoning_enabled=reasoning_enabled,
+                is_reasoning_model=is_reasoning_model,
+                image_path=image_path,
+                model_error_handlers=model_error_handlers,
+                provider_ignore=provider_ignore,
+                endpoint=endpoint,
+                use_structured_content=use_structured_content,
+            )
+            task = asyncio.create_task(coro)
+            tasks.append(task)
+            task_to_info[task] = (idx, item)
 
-    results = await asyncio.gather(*tasks, return_exceptions=True)
-    
-    for task, result in zip(tasks, results):
-        try:
-            if isinstance(result, Exception):
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        
+        for task, result in zip(tasks, results):
+            try:
+                if isinstance(result, Exception):
+                    idx = task_to_info.get(task, (0, {}))[0]
+                    category = task_to_info.get(task, (0, {}))[1].get('dimension', 'unknown')
+                    error_count += 1
+                    logger.error(f"[{idx}/{len(pending_questions)}] ✗ 异常 | 分类: {category} | 错误: {str(result)}")
+                    logger.error("异常文件: {}，所在行: {}，异常信息: {}".format(result.__traceback__.tb_frame.f_globals.get("__file__", "NULL"), result.__traceback__.tb_lineno, result.args))
+                    continue
+                
+                if task not in task_to_info:
+                    logger.warning(f"任务不在task_to_info中，跳过")
+                    continue
+                    
+                idx, question = task_to_info[task]
+                category = question.get('dimension')
+
+                if not result:
+                    logger.warning(f"[{idx}/{len(pending_questions)}] 结果为空，跳过 | 分类: {category}")
+                    logger.debug(f"结果内容: {result}")
+                    continue
+                
+                if result.get('status') == 'success':
+                    answer_preview = str(result.get('answer', ''))[:200]
+                    logger.info(f"[{idx}] 模型回答预览: {answer_preview}...")
+                
+                if result.get('status') == 'error':
+                    error_count += 1
+                    logger.info(f"[{idx}/{len(pending_questions)}] ✗ 失败 | 分类: {category} | "
+                          f"错误: {result.get('error', 'Unknown')}")
+                    continue
+
+                await storage.asave_model_output(result)
+
+                if result.get('status') == 'success':
+                    success_count += 1
+                    total_time += result.get('consume_time', 0)
+                    logger.info(f"[{idx}/{len(pending_questions)}] ✓ 成功 | 分类: {category} | "
+                          f"耗时: {result.get('consume_time', 0):.2f}s | "
+                          f"已写入SQLite")
+                else:
+                    error_count += 1
+                    logger.info(f"[{idx}/{len(pending_questions)}] ✗ 失败 | 分类: {category} | "
+                          f"错误: {result.get('error', 'Unknown')}")
+
+            except Exception as e:
                 idx = task_to_info.get(task, (0, {}))[0]
                 category = task_to_info.get(task, (0, {}))[1].get('dimension', 'unknown')
                 error_count += 1
-                logger.error(f"[{idx}/{len(pending_questions)}] ✗ 异常 | 分类: {category} | 错误: {str(result)}")
-                logger.error("异常文件: {}，所在行: {}，异常信息: {}".format(result.__traceback__.tb_frame.f_globals.get("__file__", "NULL"), result.__traceback__.tb_lineno, result.args))
-                continue
-            
-            if task not in task_to_info:
-                logger.warning(f"任务不在task_to_info中，跳过")
-                continue
-                
-            idx, question = task_to_info[task]
-            category = question.get('dimension')
+                logger.error(f"[{idx}/{len(pending_questions)}] ✗ 异常 | 分类: {category} | 错误: {str(e)}")
+                logger.error("异常文件: {}，所在行: {}，异常信息: {}".format(e.__traceback__.tb_frame.f_globals.get("__file__", "NULL"), e.__traceback__.tb_lineno, e.args))
 
-            if not result:
-                logger.warning(f"[{idx}/{len(pending_questions)}] 结果为空，跳过 | 分类: {category}")
-                logger.debug(f"结果内容: {result}")
-                continue
-            
-            if result.get('status') == 'success':
-                answer_preview = str(result.get('answer', ''))[:200]
-                logger.info(f"[{idx}] 模型回答预览: {answer_preview}...")
-            
-            if result.get('status') == 'error':
-                error_count += 1
-                logger.info(f"[{idx}/{len(pending_questions)}] ✗ 失败 | 分类: {category} | "
-                      f"错误: {result.get('error', 'Unknown')}")
-                continue
-
-            await storage.asave_model_output(result)
-
-            if result.get('status') == 'success':
-                success_count += 1
-                total_time += result.get('consume_time', 0)
-                logger.info(f"[{idx}/{len(pending_questions)}] ✓ 成功 | 分类: {category} | "
-                      f"耗时: {result.get('consume_time', 0):.2f}s | "
-                      f"已写入SQLite")
-            else:
-                error_count += 1
-                logger.info(f"[{idx}/{len(pending_questions)}] ✗ 失败 | 分类: {category} | "
-                      f"错误: {result.get('error', 'Unknown')}")
-
-        except Exception as e:
-            idx = task_to_info.get(task, (0, {}))[0]
-            category = task_to_info.get(task, (0, {}))[1].get('dimension', 'unknown')
-            error_count += 1
-            logger.error(f"[{idx}/{len(pending_questions)}] ✗ 异常 | 分类: {category} | 错误: {str(e)}")
-            logger.error("异常文件: {}，所在行: {}，异常信息: {}".format(e.__traceback__.tb_frame.f_globals.get("__file__", "NULL"), e.__traceback__.tb_lineno, e.args))
+    finally:
+        # 停止写入队列，等待队列清空
+        await storage.stop()
 
     logger.info(f"测试完成: {model_item['model_name']}")
     logger.info(f"总数: {len(questions)} | 成功: {success_count} | 失败: {error_count}")
