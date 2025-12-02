@@ -220,6 +220,18 @@ class RetryableHTTPClient:
                 )
                 status_code = response.status_code
                 
+                if status_code == 204:
+                    logger.warning(f"{context_name}返回 204 No Content，可能触发内容审查")
+                    return {
+                        'choices': [],
+                        'error': {
+                            'code': '204',
+                            'type': 'content_filtered',
+                            'message': '内容审查：该问题触发了安全过滤'
+                        },
+                        'usage': {'total_tokens': 0, 'prompt_tokens': 0, 'completion_tokens': 0}
+                    }
+                
                 if status_code == 429:
                     wait_time = self.retry_delay * (2 ** (attempt + 1))
                     logger.warning(
