@@ -63,16 +63,23 @@ class SQLiteStorage:
         """停止后台写入任务"""
         if self.enable_write_queue and self._is_running:
             self._is_running = False
-            
-            # 等待队列清空
-            if self._write_queue and not self._write_queue.empty():
-                logger.info(f"等待队列清空... (剩余: {self._write_queue.qsize()})")
+
+            # 等待队列中现有任务处理完毕
+            if self._write_queue:
+                if not self._write_queue.empty():
+                    logger.info(f"等待队列清空... (剩余: {self._write_queue.qsize()})")
+                # 等待直到所有已入队任务都调用了 task_done
                 await self._write_queue.join()
-            
-            # 停止写入任务
+
+                try:
+                    await self._write_queue.put(None)
+                except Exception as e:
+                    logger.error(f"发送写入循环停止信号失败: {e}")
+
+            # 等待写入任务结束
             if self._writer_task:
                 await self._writer_task
-            
+
             # 停止重试任务
             if self._retry_task:
                 self._retry_task.cancel()
@@ -80,14 +87,15 @@ class SQLiteStorage:
                     await self._retry_task
                 except asyncio.CancelledError:
                     pass
-            
+
             logger.info(f"写入队列已停止")
 
     async def _writer_loop(self):
         """后台写入循环"""
         processed_count = 0
         
-        while self._is_running:
+        # 持续从队列中取任务，直到收到 None 停止信号
+        while True:
             item = None
             try:
                 try:
