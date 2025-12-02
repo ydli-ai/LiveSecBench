@@ -21,11 +21,6 @@ class SQLiteStorage:
         pk_results_table: str = "pk_results",
         tasks_table: str = "evaluation_tasks",
         task_id: Optional[str] = None,
-        enable_write_queue: bool = True,
-        queue_max_size: int = 10000,
-        failed_data_dir: Optional[str] = None,
-        retry_interval: int = 60,
-        max_retry_count: int = 10,
     ) -> None:
         self.db_path = Path(db_path)
         self.model_outputs_table = self._sanitize_identifier(model_outputs_table)
@@ -33,184 +28,9 @@ class SQLiteStorage:
         self.tasks_table = self._sanitize_identifier(tasks_table)
         self.task_id = task_id
         
-        # 写入队列相关
-        self.enable_write_queue = enable_write_queue
-        self._write_queue = asyncio.Queue(maxsize=queue_max_size) if enable_write_queue else None
-        self._writer_task = None
-        self._is_running = False
-        
-        # 失败数据持久化
-        self.failed_data_dir = Path(failed_data_dir) if failed_data_dir else self.db_path.parent / "failed_writes"
-        self.failed_data_dir.mkdir(parents=True, exist_ok=True)
-        self._failed_count = 0
-        self._retry_task = None
-        self.retry_interval = retry_interval
-        self.max_retry_count = max_retry_count
-        
         if self.db_path.parent and not self.db_path.parent.exists():
             self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self._ensure_tables()
-
-    async def start(self):
-        """启动后台写入任务"""
-        if self.enable_write_queue and not self._is_running:
-            self._is_running = True
-            self._writer_task = asyncio.create_task(self._writer_loop())
-            self._retry_task = asyncio.create_task(self._retry_failed_loop())
-            logger.info(f"写入队列已启动 (队列大小: {self._write_queue.maxsize})")
-
-    async def stop(self):
-        """停止后台写入任务"""
-        if self.enable_write_queue and self._is_running:
-            self._is_running = False
-
-            # 等待队列中现有任务处理完毕
-            if self._write_queue:
-                if not self._write_queue.empty():
-                    logger.info(f"等待队列清空... (剩余: {self._write_queue.qsize()})")
-                # 等待直到所有已入队任务都调用了 task_done
-                await self._write_queue.join()
-
-                try:
-                    await self._write_queue.put(None)
-                except Exception as e:
-                    logger.error(f"发送写入循环停止信号失败: {e}")
-
-            # 等待写入任务结束
-            if self._writer_task:
-                await self._writer_task
-
-            # 停止重试任务
-            if self._retry_task:
-                self._retry_task.cancel()
-                try:
-                    await self._retry_task
-                except asyncio.CancelledError:
-                    pass
-
-            logger.info(f"写入队列已停止")
-
-    async def _writer_loop(self):
-        """后台写入循环"""
-        processed_count = 0
-        
-        # 持续从队列中取任务，直到收到 None 停止信号
-        while True:
-            item = None
-            try:
-                try:
-                    item = await asyncio.wait_for(
-                        self._write_queue.get(), 
-                        timeout=1.0
-                    )
-                except asyncio.TimeoutError:
-                    continue
-                
-                if item is None:
-                    break
-                
-                data_type, payload = item
-                
-                try:
-                    if data_type == 'model_output':
-                        await asyncio.to_thread(self._save_model_output_sync, payload)
-                    elif data_type == 'pk_result':
-                        await asyncio.to_thread(self._save_pk_result_from_queue, payload)
-                    
-                    processed_count += 1
-                    if processed_count % 50 == 0:
-                        logger.debug(f"[Queue] 已处理 {processed_count} 项")
-                    
-                except Exception as e:
-                    logger.warning(f"数据库写入失败，保存到文件: {type(e).__name__}")
-                    await self._save_to_failed_file(data_type, payload, str(e))
-                    
-            except Exception as e:
-                logger.error(f"✗ 写入队列异常: {e}")
-                import traceback
-                traceback.print_exc()
-            
-            finally:
-                if item is not None:
-                    try:
-                        self._write_queue.task_done()
-                    except Exception as e:
-                        logger.error(f"task_done 失败: {e}")
-        
-        logger.info(f"写入循环结束，共处理 {processed_count} 项")
-
-    async def _save_to_failed_file(self, data_type: str, payload: Dict, error: str):
-        """将失败的数据保存到文件"""
-        self._failed_count += 1
-        timestamp = int(time.time() * 1000)
-        filename = f"failed_{data_type}_{timestamp}_{self._failed_count}.pkl"
-        filepath = self.failed_data_dir / filename
-        
-        failed_data = {
-            'type': data_type,
-            'payload': payload,
-            'error': error,
-            'timestamp': timestamp,
-            'retry_count': 0,
-        }
-        
-        try:
-            await asyncio.to_thread(self._write_pickle_file, filepath, failed_data)
-            logger.warning(f"数据写入失败，已保存到: {filepath.name}")
-        except Exception as e:
-            logger.error(f"无法保存失败数据到文件: {e}")
-
-    def _write_pickle_file(self, filepath: Path, data: Dict):
-        """写入 pickle 文件"""
-        with open(filepath, 'wb') as f:
-            pickle.dump(data, f)
-
-    async def _retry_failed_loop(self):
-        """定期重试失败的数据"""
-        while self._is_running:
-            try:
-                await asyncio.sleep(self.retry_interval)
-                
-                failed_files = list(self.failed_data_dir.glob("failed_*.pkl"))
-                if not failed_files:
-                    continue
-                
-                logger.info(f"发现 {len(failed_files)} 个失败数据文件，开始重试...")
-                
-                for filepath in failed_files:
-                    try:
-                        with open(filepath, 'rb') as f:
-                            failed_data = pickle.load(f)
-                        
-                        # 尝试重新写入
-                        data_type = failed_data['type']
-                        payload = failed_data['payload']
-                        
-                        if data_type == 'model_output':
-                            self._save_model_output_sync(payload)
-                        elif data_type == 'pk_result':
-                            self._save_pk_result_from_queue(payload)
-                        
-                        # 成功则删除文件
-                        filepath.unlink()
-                        logger.info(f"重试成功，已删除: {filepath.name}")
-                        
-                    except Exception as e:
-                        failed_data['retry_count'] += 1
-                        
-                        if failed_data['retry_count'] >= self.max_retry_count:
-                            new_name = filepath.name.replace('failed_', 'permanent_failed_')
-                            filepath.rename(filepath.parent / new_name)
-                            logger.error(f"重试{self.max_retry_count}次失败，标记为永久失败: {new_name}")
-                        else:
-                            with open(filepath, 'wb') as f:
-                                pickle.dump(failed_data, f)
-                            logger.warning(f"重试失败 ({failed_data['retry_count']}/{self.max_retry_count}): {filepath.name}")
-                
-            except asyncio.CancelledError:
-                break
-            except Exception as e:
-                logger.error(f"重试失败数据时出错: {e}")
 
     @staticmethod
     def _sanitize_identifier(value: str) -> str:
@@ -400,14 +220,7 @@ class SQLiteStorage:
 
     async def asave_model_output(self, payload: Dict[str, Any]) -> None:
         """异步保存模型输出"""
-        if self.enable_write_queue and self._is_running:
-            try:
-                self._write_queue.put_nowait(('model_output', payload))
-            except asyncio.QueueFull:
-                logger.warning(f"写入队列已满，直接写入数据库")
-                await asyncio.to_thread(self._save_model_output_sync, payload)
-        else:
-            await asyncio.to_thread(self._save_model_output_sync, payload)
+        await asyncio.to_thread(self._save_model_output_sync, payload)
 
     def get_pk_result(
         self,

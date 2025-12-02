@@ -297,9 +297,6 @@ async def batch_test_model(
 
     logger.info(f"开始测试模型: {model_item['model_name']} ({model_item['model']}), 题目: {len(questions)}, 并发: {max_concurrent}")
 
-    # 启动写入队列
-    await storage.start()
-    
     success_count = 0
     error_count = 0
     total_time = 0
@@ -412,8 +409,7 @@ async def batch_test_model(
                 logger.error("异常文件: {}，所在行: {}，异常信息: {}".format(e.__traceback__.tb_frame.f_globals.get("__file__", "NULL"), e.__traceback__.tb_lineno, e.args))
 
     finally:
-        # 停止写入队列，等待队列清空
-        await storage.stop()
+        pass
 
     logger.info(f"测试完成: {model_item['model_name']}")
     logger.info(f"总数: {len(questions)} | 成功: {success_count} | 失败: {error_count}")
