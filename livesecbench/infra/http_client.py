@@ -221,7 +221,8 @@ class RetryableHTTPClient:
                 status_code = response.status_code
                 
                 if status_code == 204:
-                    logger.warning(f"{context_name}返回 204 No Content，可能触发内容审查")
+                    error_text = response.text
+                    logger.warning(f"{context_name}返回 204 No Content，可能触发内容审查: {error_text}")
                     return {
                         'choices': [],
                         'error': {
