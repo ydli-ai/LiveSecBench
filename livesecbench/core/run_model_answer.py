@@ -453,14 +453,12 @@ async def batch_gen_llm_answer(
     
     model_error_handlers = config_manager.get_model_error_handlers()
     
-    tasks = []
-    valid_models = []
     for model_item in target_model_list:
         if 'api_config' not in model_item:
             logger.warning(f"模型 {model_item.get('model_name', 'unknown')} 缺少 api_config 配置，跳过")
             continue
 
-        task = batch_test_model(
+        await batch_test_model(
             model_item,
             all_questions,
             storage=storage,
@@ -474,19 +472,3 @@ async def batch_gen_llm_answer(
             global_tpm=tpm,
             model_error_handlers=model_error_handlers,
         )
-        tasks.append(task)
-        valid_models.append(model_item)
-    
-    if tasks:
-        logger.info(f"开始并行测试 {len(tasks)} 个模型")
-        results = await asyncio.gather(*tasks, return_exceptions=True)
-        
-        for i, result in enumerate(results):
-            if isinstance(result, Exception):
-                model_name = valid_models[i].get('model_name', 'unknown')
-                logger.error(f"模型 {model_name} 测试过程中发生异常: {result}")
-                logger.error("异常文件: {}，所在行: {}，异常信息: {}".format(result.__traceback__.tb_frame.f_globals.get("__file__", "NULL"), result.__traceback__.tb_lineno, result.args))
-
-        logger.info(f"所有模型测试完成")
-    else:
-        logger.warning("没有有效的模型配置，跳过测试")
