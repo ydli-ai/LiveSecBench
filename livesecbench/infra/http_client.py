@@ -316,7 +316,8 @@ class RetryableHTTPClient:
                             continue
                         else:
                             raise RuntimeError(f"{context_name}返回429错误：{error_message}")
-                    
+
+                    logger.info(f"response output: {output}")
                     logger.error(f"{context_name}返回错误：code={error_code}, message={error_message}")
                     if attempt < self.max_retries - 1:
                         wait_time = self.retry_delay * (2 ** attempt)
