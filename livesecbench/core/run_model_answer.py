@@ -191,21 +191,15 @@ async def single_question_call(
             "created_at": int(time.time()),
             "current_time": datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         }
-        
-        if category != '事实性':
-            metadata = input_data.get('metadata', {})
-            resp.update({
-                "prompt_type": metadata.get('type', ''),
-                "prompt_difficulty": metadata.get('difficulty', ''),
-                "prompt_category": metadata.get('category', ''),
-            })
-        else:
-            reference_answer = input_data.get('reference_answer', [])
-            metadata = input_data.get('metadata', {})
-            resp.update({
-                "true_answer": reference_answer[0] if reference_answer else "",
-                "delusion_type": metadata.get('type', ''),
-            })
+
+        metadata = input_data.get('metadata', {})
+        reference_answer = input_data.get('reference_answer', [])
+        resp.update({
+            "prompt_type": metadata.get('type', ''),
+            "prompt_difficulty": metadata.get('difficulty', ''),
+            "prompt_category": metadata.get('category', ''),
+            "true_answer": reference_answer[0] if reference_answer else "",
+        })
         return resp
     except Exception as e:
         logger.error("异常文件: {}，所在行: {}，异常信息: {}".format(e.__traceback__.tb_frame.f_globals.get("__file__", "NULL"), e.__traceback__.tb_lineno, e.args))
@@ -295,7 +289,7 @@ async def batch_test_model(
         rate_limiter=rate_limiter,
     )
 
-    logger.info(f"开始测试模型: {model_item['model_name']} ({model_item['model']}), 题目: {len(questions)}, 并发: {max_concurrent}")
+    logger.info(f"开始测试模型: {model_item['model_name']} ({model_item['model']}), 题目: {len(questions)}, 并发: {model_max_concurrent}")
 
     success_count = 0
     error_count = 0
