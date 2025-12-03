@@ -160,7 +160,7 @@ class ScoringOrchestrator:
                     'reasoning_b': result_b.get('reasoning'),
                     'answer_a': result_a.get('answer'),
                     'answer_b': result_b.get('answer'),
-                    'true_answer': result_a.get('true_answer') if category == '事实性' else None,
+                    'true_answer': result_a.get('true_answer') if result_a.get('true_answer', '') else None,
                 })
         
         pk_results = await self._execute_pks(pk_tasks, max_workers)
