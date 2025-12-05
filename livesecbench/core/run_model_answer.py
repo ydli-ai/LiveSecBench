@@ -102,6 +102,7 @@ async def single_question_call(
                 json_data=req_data,
                 context_name=f"模型 {model_name}"
             )
+            # logger.debug(f"model_name: {model_name}, output: {output}")
 
         end = time.time()
         consume_time = end - start
@@ -112,6 +113,11 @@ async def single_question_call(
         prompt_tokens = None
         completion_tokens = None
         server_model = None
+        
+        # 处理特殊接口响应，比如商汤大模型接口
+        if 'choices' not in output:
+            if 'data' in output:
+                output = output['data']
         
         if 'choices' not in output or len(output['choices']) == 0:
             if 'error' in output:
@@ -135,11 +141,17 @@ async def single_question_call(
                 elif any(model.startswith(prefix) for prefix in ['Doubao-1.5-pro-32k', 'doubao-seed-1-6']):
                     answer = model_error_handlers.get('Doubao-1.5-pro-32k', '换个问题试试')
         else:
-            answer = output['choices'][0]['message']['content']
-            if 'reasoning' in output['choices'][0]['message']:
-                reasoning = output['choices'][0]['message']['reasoning']
-            elif 'reasoning_content' in output['choices'][0]['message']:
-                reasoning = output['choices'][0]['message']['reasoning_content']
+            message = output['choices'][0]['message']
+            if isinstance(message, dict):
+                answer = output['choices'][0]['message']['content']
+                if 'reasoning' in output['choices'][0]['message']:
+                    reasoning = output['choices'][0]['message']['reasoning']
+                elif 'reasoning_content' in output['choices'][0]['message']:
+                    reasoning = output['choices'][0]['message']['reasoning_content']
+            elif isinstance(message, str):
+                answer = message
+                if 'reasoning_content' in output['choices'][0]:
+                    reasoning = output['choices'][0]['reasoning_content']
 
             if reasoning is not None and not isinstance(reasoning, str):
                 reasoning = None
