@@ -68,14 +68,72 @@ class ELOScorer:
         return result
 
 
+def _load_previous_rankings(previous_ranking_file: Optional[Path] = None) -> Dict[str, int]:
+    """加载上一期的排名数据"""
+    if previous_ranking_file is None:
+        # 自动查找最近的排名文件（排除当前月份）
+        results_base = Path("results")
+        if not results_base.exists():
+            logger.info("未找到results目录，无法加载历史排名")
+            return {}
+        
+        current_month = time.strftime('%Y-%m', time.localtime())
+        ranking_files = []
+        
+        for date_dir in results_base.iterdir():
+            if not date_dir.is_dir():
+                continue
+            
+            # 查找该目录下的models文件
+            models_files = list(date_dir.glob("*-models*.csv"))
+            for f in models_files:
+                # 从文件名提取月份标签
+                file_month = f.name.split('-models')[0]
+                if file_month != current_month:
+                    ranking_files.append(f)
+        
+        if not ranking_files:
+            logger.info("未找到历史排名文件")
+            return {}
+        
+        # 选择最新的文件
+        previous_ranking_file = max(ranking_files, key=lambda p: p.stat().st_mtime)
+        logger.info(f"加载历史排名: {previous_ranking_file}")
+    
+    try:
+        df = pd.read_csv(previous_ranking_file)
+        if 'rank' not in df.columns or 'model_name' not in df.columns:
+            logger.warning(f"历史排名文件缺少必要的列: {previous_ranking_file}")
+            return {}
+        
+        # 建立模型名到排名的映射
+        rank_map = {}
+        for _, row in df.iterrows():
+            model_name = row['model_name']
+            rank = row['rank']
+            if pd.notna(model_name) and pd.notna(rank):
+                rank_map[model_name] = int(rank)
+        
+        logger.info(f"成功加载 {len(rank_map)} 个模型的历史排名")
+        return rank_map
+        
+    except Exception as e:
+        logger.error(f"加载历史排名文件出错: {e}")
+        return {}
+
+
 def rank(
     config_manager: ConfigManager, 
     dimensions: Optional[List[str]] = None,
     task_manager: Optional[Any] = None,
+    previous_ranking_file: Optional[Path] = None,
 ) -> Tuple[Path, Path]:
     """生成模型排名和统计数据"""
     if dimensions is None:
         dimensions = config_manager.get_dimensions()
+    
+    # 加载上一期的排名数据
+    previous_rankings = _load_previous_rankings(previous_ranking_file)
     
     elo_results_dir = config_manager.get_elo_results_dir()
     
@@ -183,7 +241,6 @@ def rank(
         
         model_record.update({
             "evaluation_date": today,
-            "rank_change": model_config.get('rank_change', 0),
             "is_open_source": model_config.get('open_source', False),
             "publish_time": model_config.get('publish_time', ''),
             "location": model_config.get('location', ''),
@@ -204,6 +261,59 @@ def rank(
     
     df = df.sort_values('overall_score', ascending=False).reset_index(drop=True)
     df.insert(0, 'rank', range(1, len(df) + 1))
+    
+    # 计算排名变化（基于两次排名的交集）
+    if previous_rankings:
+        current_models = set(df['model_name'].tolist())
+        previous_models = set(previous_rankings.keys())
+        common_models = current_models & previous_models
+        
+        if common_models:
+            logger.info(f"两次排名的交集包含 {len(common_models)} 个模型")
+            
+            # 在交集中，按本次overall_score排序，得到交集内排名
+            df_common = df[df['model_name'].isin(common_models)].copy()
+            df_common = df_common.sort_values('overall_score', ascending=False).reset_index(drop=True)
+            current_intersection_rank = {
+                row['model_name']: idx + 1 
+                for idx, row in df_common.iterrows()
+            }
+            
+            previous_common = [(model, previous_rankings[model]) for model in common_models]
+            previous_common.sort(key=lambda x: x[1])
+            previous_intersection_rank = {
+                model: idx + 1 
+                for idx, (model, _) in enumerate(previous_common)
+            }
+            
+            rank_changes = []
+            for _, row in df.iterrows():
+                model_name = row['model_name']
+                
+                if model_name in common_models:
+                    prev_rank = previous_intersection_rank[model_name]
+                    curr_rank = current_intersection_rank[model_name]
+                    rank_change = prev_rank - curr_rank
+                    rank_changes.append(rank_change)
+                    
+                    if rank_change != 0:
+                        logger.debug(
+                            f"{model_name}: 交集内排名 第{prev_rank}名 -> 第{curr_rank}名，"
+                            f"变化: {rank_change:+d}"
+                        )
+                else:
+                    rank_changes.append(0)
+                    logger.debug(f"{model_name}: 新上榜模型")
+            
+            df['rank_change'] = rank_changes
+            changed_count = sum(1 for x in rank_changes if x != 0)
+            logger.info(f"已计算排名变化: {changed_count} 个模型排名变化, {len(current_models - common_models)} 个新上榜")
+        else:
+            df['rank_change'] = 0
+            logger.info("两次排名无交集，所有模型视为新上榜")
+    else:
+        df['rank_change'] = 0
+        logger.info("未找到历史排名数据，所有模型的rank_change设为0")
     
     base_columns = ['rank', 'model_name', 'model_id', 'provider', 'overall_score']
     other_columns = [col for col in df.columns if col not in base_columns]
