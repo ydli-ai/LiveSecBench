@@ -7,11 +7,12 @@ from pathlib import Path
 from typing import Any, Dict, Optional, List
 
 from livesecbench.utils.logger import get_logger
+from livesecbench.storage.base_storage import BaseStorage
 
 logger = get_logger(__name__)
 
 
-class SQLiteStorage:
+class SQLiteStorage(BaseStorage):
     """SQLite评分数据读写操作封装"""
 
     def __init__(
@@ -22,31 +23,12 @@ class SQLiteStorage:
         tasks_table: str = "evaluation_tasks",
         task_id: Optional[str] = None,
     ) -> None:
+        super().__init__(model_outputs_table, pk_results_table, tasks_table, task_id)
         self.db_path = Path(db_path)
-        self.model_outputs_table = self._sanitize_identifier(model_outputs_table)
-        self.pk_results_table = self._sanitize_identifier(pk_results_table)
-        self.tasks_table = self._sanitize_identifier(tasks_table)
-        self.task_id = task_id
         
         if self.db_path.parent and not self.db_path.parent.exists():
             self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self._ensure_tables()
-
-    @staticmethod
-    def _sanitize_identifier(value: str) -> str:
-        if not value or not value.replace("_", "").isalnum():
-            raise ValueError(f"非法的SQLite标识符: {value}")
-        return value
-
-    @staticmethod
-    def _normalize_value(value: Any) -> Optional[str]:
-        if value is None:
-            return None
-        if isinstance(value, (list, tuple)):
-            if len(value) == 1:
-                return str(value[0])
-            return json.dumps(value, ensure_ascii=False)
-        return str(value)
 
     def _connect(self) -> sqlite3.Connection:
         conn = sqlite3.connect(self.db_path, check_same_thread=False, timeout=30)

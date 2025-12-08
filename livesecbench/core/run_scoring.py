@@ -4,7 +4,8 @@ from typing import Optional, Tuple, Dict, Any, Callable
 
 from livesecbench.infra.config import ConfigManager
 from livesecbench.infra.http_client import RetryableHTTPClient
-from livesecbench.storage.sqlite_storage import SQLiteStorage
+from livesecbench.storage import create_storage
+from livesecbench.storage.base_storage import BaseStorage
 from livesecbench.utils.env_loader import load_project_env
 from livesecbench.utils.logger import get_logger
 
@@ -89,7 +90,7 @@ async def pk(
     evaluation_dimension: str,
     evaluate_prompt_template: str,
     judge_model: str,
-    storage: SQLiteStorage,
+    storage: BaseStorage,
     category: str,
     question: str,
     model_A: str,
@@ -189,7 +190,7 @@ async def pk(
 def create_pk_runner(
     criteria_template: str,
     judge_model: str,
-    storage: SQLiteStorage,
+    storage: BaseStorage,
     judge_api_config: Dict[str, Any],
 ) -> Callable:
     """创建PK运行器，返回一个异步函数包装器"""
@@ -243,7 +244,7 @@ def create_pk_runner(
     return pk_wrapper
 
 
-def build_model_result_fetcher(storage: SQLiteStorage) -> Callable[[str, str, str], Optional[Dict[str, Any]]]:
+def build_model_result_fetcher(storage: BaseStorage) -> Callable[[str, str, str], Optional[Dict[str, Any]]]:
     """模型结果获取函数"""
     def _fetch(model: str, category: str, prompt: str) -> Optional[Dict[str, Any]]:
         return storage.get_model_output(model, category, prompt)
@@ -313,14 +314,8 @@ async def launch_evaluation(
             dimension_to_scorer_config[dimension] = item
     
     # 加载存储配置
-    storage_tables = config_manager.get_storage_tables()
     task_id = task_manager.task_id if task_manager else None
-    storage = SQLiteStorage(
-        db_path=config_manager.get_storage_db_path(),
-        model_outputs_table=storage_tables['model_outputs_table'],
-        pk_results_table=storage_tables['pk_results_table'],
-        task_id=task_id,
-    )
+    storage = create_storage(config_manager, task_id=task_id)
     
     all_models = config_manager.get_all_model_ids()
     reasoning_models = config_manager.get_reasoning_model_ids()

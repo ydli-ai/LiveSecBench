@@ -435,13 +435,8 @@ async def batch_gen_llm_answer(
         config_path = Path(__file__).resolve().parent.parent / "configs" / "run_custom_safety_benchmark.yaml"
         config_manager = ConfigManager(str(config_path))
     
-    storage_tables = config_manager.get_storage_tables()
-    storage = SQLiteStorage(
-        db_path=config_manager.get_storage_db_path(),
-        model_outputs_table=storage_tables['model_outputs_table'],
-        pk_results_table=storage_tables['pk_results_table'],
-        task_id=task_id,
-    )
+    from livesecbench.storage import create_storage
+    storage = create_storage(config_manager, task_id=task_id)
     
     api_call_settings = config_manager.get_api_call_settings()
     timeout = api_call_settings.get('timeout', 210)

@@ -143,6 +143,24 @@ scoring_settings:
 
 # 定义数据库存储配置
 storage:
+  type: "mysql"
+
+  mysql:
+    host: "localhost"
+    port: 3306
+    user: "livesec_user"
+    password: "env_var:MYSQL_PASSWORD"  # 从环境变量读取
+    database: "livesecbench"
+    charset: "utf8mb4"
+    pool_size: 10          # 连接池大小
+    max_overflow: 20       # 最大溢出连接数
+    pool_timeout: 30       # 连接超时时间
+  
+  tables:
+    model_outputs: "model_outputs"
+    pk_results: "pk_results"
+    tasks: "evaluation_tasks"
+
   sqlite:
     db_path: "data/livesecbench.db"
     model_outputs_table: "model_outputs"

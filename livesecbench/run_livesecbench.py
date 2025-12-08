@@ -158,14 +158,8 @@ def main():
     logger.info("生成排名")
     rank(config_manager, dimensions, task_manager=task_manager)
     
-    storage_tables = config_manager.get_storage_tables()
-    from livesecbench.storage.sqlite_storage import SQLiteStorage
-    storage = SQLiteStorage(
-        db_path=config_manager.get_storage_db_path(),
-        model_outputs_table=storage_tables['model_outputs_table'],
-        pk_results_table=storage_tables['pk_results_table'],
-        task_id=task_manager.task_id,
-    )
+    from livesecbench.storage import create_storage
+    storage = create_storage(config_manager, task_id=task_manager.task_id)
     storage.save_task_info(task_manager.task_id, task_manager.get_task_info())
     
     logger.info("生成测试报告")
