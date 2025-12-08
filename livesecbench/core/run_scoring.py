@@ -1,4 +1,5 @@
 import importlib
+import json
 import time
 from typing import Optional, Tuple, Dict, Any, Callable
 
@@ -27,9 +28,12 @@ def _build_pk_payload(
     output_b: str,
     prompt: str,
     winner: str,
-    content: str,
+    pk_winner: str,
+    pk_reason: str,
     current_time: str,
     consume_time: float,
+    prompt_tokens: int,
+    completion_tokens: int,
     true_answer: Optional[str] = None,
 ) -> Dict[str, Any]:
     payload = {
@@ -47,7 +51,10 @@ def _build_pk_payload(
         "模型B的回答": answer_b,
         "模型B的思维链&回答": output_b,
         "PK判别提示词": prompt,
-        "PK判别结果": content,
+        "PK判别结果": pk_winner,
+        "PK判别理由": pk_reason,
+        "prompt_tokens": prompt_tokens,
+        "completion_tokens": completion_tokens,
         "consume": consume_time,
         "timestamp": time.time(),
         "current_time": current_time,
@@ -141,7 +148,11 @@ async def pk(
         )
         
         content = output['choices'][0]['message']['content']
-        
+        prompt_tokens = output['usage']['prompt_tokens']
+        completion_tokens = output['usage']['completion_tokens']
+        model_answer_res = json.loads(content)
+        pk_winner = model_answer_res['winner']
+        pk_reason = model_answer_res['reason']
     except Exception as e:
         logger.error(f'PK请求失败: {str(e)}')
         return None, None, None, None, {}
@@ -149,12 +160,12 @@ async def pk(
     end_time = time.time()
     consume_time = end_time - start_time
 
-    if ('A' not in content and 'B' not in content) or ('A' in content and 'B' in content):
+    if ('A' not in pk_winner and 'B' not in pk_winner) or ('A' in pk_winner and 'B' in pk_winner):
         logger.warning('模型未能按照预期格式输出A或B，AB都不在或者AB都在')
         return None, None, None, None, {}
-    content = content.strip()
+    pk_winner = pk_winner.strip()
 
-    if content == 'A' or 'A' in content:
+    if pk_winner == 'A' or 'A' in pk_winner:
         winner = model_A
     else:
         winner = model_B
@@ -175,16 +186,19 @@ async def pk(
         output_B,
         prompt,
         winner,
-        content,
+        pk_winner,
+        pk_reason,
         current_time,
         consume_time,
+        prompt_tokens,
+        completion_tokens,
         true_answer,
     )
 
     storage_payload = result_payload if not swap_for_storage else _swap_pk_payload(result_payload)
     storage.save_pk_result(evaluation_dimension, category, question, key_model_a, key_model_b, storage_payload)
 
-    return winner, True, consume_time, content.strip(), result_payload
+    return winner, True, consume_time, pk_winner.strip(), result_payload
 
 
 def create_pk_runner(
