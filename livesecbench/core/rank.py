@@ -214,8 +214,11 @@ def rank(
         model_id = api_config.get('model_id')
         if not model_id:
             continue
+        enabled = model_config.get('enabled', True)
+        if not enabled:
+            continue
         
-        provider = api_config.get('provider', '')
+        provider = model_config.get('organization', '')
         display_name = model_name_map.get(model_id, model_config.get('model_name', model_id))
         model_record = {
             'model_name': display_name,
@@ -242,6 +245,8 @@ def rank(
         model_record.update({
             "evaluation_date": today,
             "is_open_source": model_config.get('open_source', False),
+            "is_reasoning": model_config.get('is_reasoning', False),
+            "image_text_input": model_config.get('image_text_input', False),
             "publish_time": model_config.get('publish_time', ''),
             "location": model_config.get('location', ''),
             "model_url": model_config.get('model_detail_url', ''),
