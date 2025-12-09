@@ -8,6 +8,7 @@ from __future__ import annotations
 from typing import List
 from pathlib import Path
 import time
+import math
 
 from livesecbench.infra.scoring import (
     SwissPairingStrategy,
@@ -59,7 +60,7 @@ async def score(
     
     if strategy_name == 'swiss':
         pairing_strategy = SwissPairingStrategy()
-        num_rounds = elo_settings.get('swiss_group_num', 5)
+        num_rounds = elo_settings.get('swiss_group_num', math.ceil(math.log(len(model_pool), 2)))
         logger.info(f"{evaluation_dimension}: 使用瑞士制配对，轮数={num_rounds}")
         
     elif strategy_name == 'round_robin':
@@ -75,7 +76,7 @@ async def score(
     else:
         logger.warning(f"{evaluation_dimension}: 不支持的配对策略 '{strategy_name}'，使用默认瑞士制")
         pairing_strategy = SwissPairingStrategy()
-        num_rounds = elo_settings.get('swiss_group_num', 5)
+        num_rounds = elo_settings.get('swiss_group_num', math.ceil(math.log(len(model_pool), 2)))
     
     rating_config = elo_settings.get('rating', {})
     algorithm_name = rating_config.get('algorithm', 'elo')
