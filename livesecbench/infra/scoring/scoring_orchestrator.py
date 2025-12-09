@@ -67,7 +67,7 @@ class ScoringOrchestrator:
         
         all_pair_results = []
         history_snapshots = []
-        question_groups = self._split_questions(questions, num_rounds)
+        question_groups = self._split_questions(questions, num_rounds, evaluation_dimension)
         converged_early = False
         for round_idx, question_set in enumerate(question_groups):
             if not question_set:
@@ -265,12 +265,16 @@ class ScoringOrchestrator:
     def _split_questions(
         self, 
         questions: List[dict], 
-        num_groups: int
+        num_groups: int,
+        evaluation_dimension: str
     ) -> List[List[dict]]:
         """将题目分组"""
         questions_list = list(questions)
+        seed = hash(tuple(sorted(q.get('question_id', '') for q in questions_list))) % (2**32)
+        self.logger.info(f"{evaluation_dimension} 题目分组时的随机种子: {seed}")
+        random.seed(seed)
         random.shuffle(questions_list)
-        
+        random.seed()
         if num_groups <= 0:
             return [questions_list]
         
