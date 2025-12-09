@@ -144,7 +144,8 @@ async def pk(
         output = await http_client.post(
             endpoint=endpoint,
             json_data=req_data,
-            context_name="PK判别模型"
+            context_name="PK判别模型",
+            task_type="judge"
         )
         
         content = output['choices'][0]['message']['content']

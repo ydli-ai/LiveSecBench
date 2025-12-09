@@ -196,6 +196,7 @@ class RetryableHTTPClient:
         json_data: Dict[str, Any],
         headers: Optional[Dict[str, str]] = None,
         context_name: str = "请求",
+        task_type: str = "general",  # 任务类型: "general"(普通), "judge"(判别), "answer"(回答)
     ) -> Dict[str, Any]:
         """发送POST请求（带重试机制）"""
         client = await self._get_client()
@@ -255,6 +256,48 @@ class RetryableHTTPClient:
                         if error_code and error_code in ["data_inspection_failed", 18, "no_response_from_channel"]:
                             return output['error']
                     response.raise_for_status()
+                
+                # 402 错误特殊处理：判别任务等待1小时，其他任务正常重试
+                if status_code == 402:
+                    error_text = response.text
+                    
+                    if task_type == "judge":
+                        wait_time = 3600
+                        logger.warning(
+                            f"{context_name}遭遇余额不足(402)，判别任务将等待 {wait_time/60:.0f} 分钟后重试。"
+                            f"第 {attempt + 1}/{self.max_retries} 次重试。请及时充值！"
+                        )
+                        logger.warning(f"错误详情: {error_text}")
+                        
+                        if attempt < self.max_retries - 1:
+                            # 每隔5分钟打印一次提醒
+                            for i in range(12):
+                                remaining_minutes = (12 - i) * 5
+                                if i == 0:
+                                    logger.info(f"等待中...剩余 {remaining_minutes} 分钟（可在此期间充值）")
+                                elif i % 3 == 0:
+                                    logger.info(f"仍在等待...剩余 {remaining_minutes} 分钟")
+                                await asyncio.sleep(300)
+                            logger.info(f"等待结束，准备重试 {context_name}...")
+                            continue
+                        else:
+                            logger.error(f"{context_name}达到最大重试次数，仍然余额不足。")
+                            raise RuntimeError(f"{context_name}余额不足(402)，已达到最大重试次数")
+                    else:
+                        logger.warning(
+                            f"{context_name}遭遇余额不足(402)，任务类型: {task_type}。"
+                            f"第 {attempt + 1}/{self.max_retries} 次重试。"
+                        )
+                        logger.warning(f"错误详情: {error_text}")
+                        
+                        if attempt < self.max_retries - 1:
+                            wait_time = self.retry_delay * (2 ** attempt)
+                            logger.info(f"等待 {wait_time:.2f}s 后重试...")
+                            await asyncio.sleep(wait_time)
+                            continue
+                        else:
+                            logger.error(f"{context_name}余额不足(402)，已达到最大重试次数。")
+                            response.raise_for_status()
                 
                 if 401 <= status_code < 500:
                     error_text = response.text

@@ -100,7 +100,8 @@ async def single_question_call(
             output = await http_client.post(
                 endpoint=endpoint,
                 json_data=req_data,
-                context_name=f"模型 {model_name}"
+                context_name=f"模型 {model_name}",
+                task_type="answer"
             )
             # logger.debug(f"model_name: {model_name}, output: {output}")
 
