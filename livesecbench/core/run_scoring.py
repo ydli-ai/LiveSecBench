@@ -126,6 +126,7 @@ async def pk(
     if cached:
         if swap_for_storage:
             cached = _swap_pk_payload(cached)
+        logger.info(f"PK结果缓存命中: {key_model_a} vs {key_model_b}, 获胜模型: {cached['winner']}")
         return cached["winner"], False, 0, None, cached
 
     req_data = {
