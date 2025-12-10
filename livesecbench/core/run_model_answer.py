@@ -31,7 +31,7 @@ async def single_question_call(
         storage: SQLiteStorage,
         reasoning_enabled: bool = True,
         is_reasoning_model: bool = False,
-        image_path: Optional[str] = None,
+        image_paths: Optional[List[str]] = None,
         model_error_handlers: Optional[Dict[str, str]] = None,
         provider_ignore: Optional[list] = None,
         endpoint: str = "chat/completions",
@@ -47,37 +47,34 @@ async def single_question_call(
     model_error_handlers = model_error_handlers or {}
 
     try:
+        content_parts = [{"type": "text", "text": prompt}]
         
-        if image_path:
-            if image_path.startswith('http://') or image_path.startswith('https://'):
-                data_url = image_path
-            else:
-                base64_image = encode_image_to_base64(image_path)
-                image_format = Path(image_path).suffix.replace('.', '')
-                if image_path.endswith('jpg') or image_path.endswith('jpeg'):
-                    image_format = 'jpeg'
-                if image_format not in ['png', 'jpeg', 'gif', 'webp']:
-                    raise Exception("不支持的图片格式，仅支持 png, jpeg, gif, webp")
-                data_url = f"data:image/{image_format};base64,{base64_image}"
-
-            messages = [
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "text", "text": prompt},
-                        {"type": "image_url", "image_url": {"url": data_url}}
-                    ]
-                }
-            ]
+        if image_paths:
+            for img_path in image_paths:
+                if img_path.startswith('http://') or img_path.startswith('https://'):
+                    data_url = img_path
+                else:
+                    # 将相对路径转为绝对路径（基于question_set目录）
+                    if not Path(img_path).is_absolute():
+                        question_set_base = Path(__file__).resolve().parent.parent / "question_set"
+                        img_path = str(question_set_base / img_path)
+                    
+                    base64_image = encode_image_to_base64(img_path)
+                    image_format = Path(img_path).suffix.replace('.', '').lower()
+                    if image_format in ['jpg', 'jpeg']:
+                        image_format = 'jpeg'
+                    if image_format not in ['png', 'jpeg', 'gif', 'webp']:
+                        raise Exception(f"不支持的图片格式: {image_format}，仅支持 png, jpeg, gif, webp")
+                    data_url = f"data:image/{image_format};base64,{base64_image}"
+                
+                content_parts.append({
+                    "type": "image_url", 
+                    "image_url": {"url": data_url}
+                })
+            
+            messages = [{"role": "user", "content": content_parts}]
         elif use_structured_content:
-            messages = [
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "text", "text": prompt}
-                    ]
-                }
-            ]
+            messages = [{"role": "user", "content": content_parts}]
         else:
             messages = [{"role": "user", "content": prompt}]
         
@@ -204,6 +201,10 @@ async def single_question_call(
             "created_at": int(time.time()),
             "current_time": datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         }
+        
+        if image_paths or 'question_image' in input_data:
+            resp['question_image'] = input_data.get('question_image', [])
+            resp['image_paths'] = image_paths or []
 
         metadata = input_data.get('metadata', {})
         reference_answer = input_data.get('reference_answer', [])
@@ -333,15 +334,15 @@ async def batch_test_model(
         enable_image_text = model_item.get('image_text_input', False)
         use_structured_content = model_item.get('use_structured_content', False)
         
-        task_to_info = {}
         tasks = []
+        completed_count = 0
         for idx, item in enumerate(pending_questions, 1):
-            image_path = None
+            image_paths = None
             if enable_image_text:
-                image_path = item.get('image_path') or item.get('image_url')
-                if not image_path:
-                    metadata = item.get('metadata') or {}
-                    image_path = metadata.get('image_path') or metadata.get('image_url')
+                if 'question_image' in item and isinstance(item['question_image'], list):
+                    image_paths = [img['file_path'] for img in item['question_image'] if 'file_path' in img]
+                    if image_paths:
+                        logger.debug(f"题目 {idx} 包含 {len(image_paths)} 张图片")
             coro = single_question_call(
                 http_client=http_client,
                 semaphore=semaphore,
@@ -351,7 +352,7 @@ async def batch_test_model(
                 storage=storage,
                 reasoning_enabled=reasoning_enabled,
                 is_reasoning_model=is_reasoning_model,
-                image_path=image_path,
+                image_paths=image_paths,
                 model_error_handlers=model_error_handlers,
                 provider_ignore=provider_ignore,
                 endpoint=endpoint,
@@ -359,41 +360,35 @@ async def batch_test_model(
             )
             task = asyncio.create_task(coro)
             tasks.append(task)
-            task_to_info[task] = (idx, item)
 
         for completed_task in asyncio.as_completed(tasks):
             try:
                 result = await completed_task
-                
-                if completed_task not in task_to_info:
-                    logger.warning(f"任务不在task_to_info中，跳过")
-                    continue
-                    
-                idx, question = task_to_info[completed_task]
-                category = question.get('dimension')
+                completed_count += 1
 
                 if not result:
-                    logger.warning(f"[{idx}/{len(pending_questions)}] 结果为空，跳过 | 分类: {category}")
+                    logger.warning(f"[{completed_count}/{len(pending_questions)}] 结果为空，跳过 | 分类: {category}")
                     continue
+                
+                category = result.get('category', 'unknown')
                 
                 if result.get('status') == 'success':
                     await storage.asave_model_output(result)
                     success_count += 1
                     total_time += result.get('consume_time', 0)
                     answer_preview = str(result.get('answer', ''))[:200]
-                    logger.info(f"[{idx}/{len(pending_questions)}] ✓ 成功 | 分类: {category} | "
+                    logger.info(f"[{completed_count}/{len(pending_questions)}] ✓ 成功 | 分类: {category} | "
                           f"耗时: {result.get('consume_time', 0):.2f}s | "
-                          f"已写入数据库: {result.get('id')} | 回答预览: {answer_preview}...")
+                          f"已写入数据库: {result.get('prompt_hash')} | 回答预览: {answer_preview}...")
                 else:
                     error_count += 1
-                    logger.info(f"[{idx}/{len(pending_questions)}] ✗ 失败 | 分类: {category} | "
+                    logger.info(f"[{completed_count}/{len(pending_questions)}] ✗ 失败 | 分类: {category} | "
                           f"错误: {result.get('error', 'Unknown')}")
 
             except Exception as e:
-                idx = task_to_info.get(completed_task, (0, {}))[0]
-                category = task_to_info.get(completed_task, (0, {}))[1].get('dimension', 'unknown')
+                completed_count += 1
                 error_count += 1
-                logger.error(f"[{idx}/{len(pending_questions)}] ✗ 异常 | 分类: {category} | 错误: {str(e)}")
+                logger.error(f"[{completed_count}/{len(pending_questions)}] ✗ 异常 | 错误: {str(e)}")
                 logger.error("异常文件: {}，所在行: {}，异常信息: {}".format(
                     e.__traceback__.tb_frame.f_globals.get("__file__", "NULL"), 
                     e.__traceback__.tb_lineno, 
@@ -528,41 +523,121 @@ async def batch_gen_llm_answer(
     
     concurrency_groups = api_call_settings.get('concurrency_groups', [])
     
+    questions_by_dimension = {}
+    for question in all_questions:
+        dimension = question.get('dimension', 'unknown')
+        if dimension not in questions_by_dimension:
+            questions_by_dimension[dimension] = []
+        questions_by_dimension[dimension].append(question)
+    
+    logger.info(f"问题按维度分组: {', '.join([f'{dim}({len(qs)}题)' for dim, qs in questions_by_dimension.items()])}")
+    
+    has_cross_modal = 'cross_modal' in questions_by_dimension
+    if has_cross_modal:
+        cross_modal_questions = questions_by_dimension['cross_modal']
+        other_questions = [q for dim, qs in questions_by_dimension.items() if dim != 'cross_modal' for q in qs]
+        
+        image_text_models = [m for m in target_model_list if m.get('image_text_input', False)]
+        other_models = [m for m in target_model_list if not m.get('image_text_input', False)]
+        
+        logger.info(f"cross_modal 维度共 {len(cross_modal_questions)} 题，将使用 {len(image_text_models)} 个支持图文输入的模型")
+        if other_questions:
+            logger.info(f"其他维度共 {len(other_questions)} 题，将使用全部 {len(target_model_list)} 个模型")
+    else:
+        cross_modal_questions = []
+        other_questions = all_questions
+        image_text_models = []
+        other_models = []
+    
     if not concurrency_groups:
         logger.info("未配置并发分组，将串行执行所有模型")
-        for model_item in target_model_list:
-            if 'api_config' not in model_item:
-                logger.warning(f"模型 {model_item.get('model_name', 'unknown')} 缺少 api_config 配置，跳过")
-                continue
+        
+        if has_cross_modal and image_text_models and cross_modal_questions:
+            logger.info("=" * 60)
+            logger.info(f"开始处理 cross_modal 维度，使用 {len(image_text_models)} 个图文模型")
+            logger.info("=" * 60)
+            for model_item in image_text_models:
+                if 'api_config' not in model_item:
+                    logger.warning(f"模型 {model_item.get('model_name', 'unknown')} 缺少 api_config 配置，跳过")
+                    continue
+                
+                await batch_test_model(
+                    model_item,
+                    cross_modal_questions,
+                    storage=storage,
+                    timeout=timeout,
+                    max_concurrent=max_concurrent,
+                    reasoning_enabled=reasoning_enabled,
+                    max_retries=max_retries,
+                    retry_delay=retry_delay,
+                    global_rate_limit_per_second=rate_limit_per_second,
+                    global_rate_limit_per_minute=rate_limit_per_minute,
+                    global_tpm=tpm,
+                    model_error_handlers=model_error_handlers,
+                )
+        
+        if other_questions:
+            logger.info("=" * 60)
+            logger.info(f"开始处理其他维度，使用全部 {len(target_model_list)} 个模型")
+            logger.info("=" * 60)
+            for model_item in target_model_list:
+                if 'api_config' not in model_item:
+                    logger.warning(f"模型 {model_item.get('model_name', 'unknown')} 缺少 api_config 配置，跳过")
+                    continue
 
-            await batch_test_model(
-                model_item,
-                all_questions,
+                await batch_test_model(
+                    model_item,
+                    other_questions,
+                    storage=storage,
+                    timeout=timeout,
+                    max_concurrent=max_concurrent,
+                    reasoning_enabled=reasoning_enabled,
+                    max_retries=max_retries,
+                    retry_delay=retry_delay,
+                    global_rate_limit_per_second=rate_limit_per_second,
+                    global_rate_limit_per_minute=rate_limit_per_minute,
+                    global_tpm=tpm,
+                    model_error_handlers=model_error_handlers,
+                )
+    else:
+        logger.info(f"使用并发分组配置，共 {len(concurrency_groups)} 个分组")
+        
+        if has_cross_modal and image_text_models and cross_modal_questions:
+            logger.info("=" * 60)
+            logger.info(f"开始处理 cross_modal 维度，使用 {len(image_text_models)} 个图文模型")
+            logger.info("=" * 60)
+            await execute_models_by_groups(
+                target_model_list=image_text_models,
+                all_questions=cross_modal_questions,
                 storage=storage,
+                concurrency_groups=concurrency_groups,
                 timeout=timeout,
                 max_concurrent=max_concurrent,
                 reasoning_enabled=reasoning_enabled,
                 max_retries=max_retries,
                 retry_delay=retry_delay,
-                global_rate_limit_per_second=rate_limit_per_second,
-                global_rate_limit_per_minute=rate_limit_per_minute,
-                global_tpm=tpm,
+                rate_limit_per_second=rate_limit_per_second,
+                rate_limit_per_minute=rate_limit_per_minute,
+                tpm=tpm,
                 model_error_handlers=model_error_handlers,
             )
-    else:
-        logger.info(f"使用并发分组配置，共 {len(concurrency_groups)} 个分组")
-        await execute_models_by_groups(
-            target_model_list=target_model_list,
-            all_questions=all_questions,
-            storage=storage,
-            concurrency_groups=concurrency_groups,
-            timeout=timeout,
-            max_concurrent=max_concurrent,
-            reasoning_enabled=reasoning_enabled,
-            max_retries=max_retries,
-            retry_delay=retry_delay,
-            rate_limit_per_second=rate_limit_per_second,
-            rate_limit_per_minute=rate_limit_per_minute,
-            tpm=tpm,
-            model_error_handlers=model_error_handlers,
-        )
+        
+        if other_questions:
+            logger.info("=" * 60)
+            logger.info(f"开始处理其他维度，使用全部 {len(target_model_list)} 个模型")
+            logger.info("=" * 60)
+            await execute_models_by_groups(
+                target_model_list=target_model_list,
+                all_questions=other_questions,
+                storage=storage,
+                concurrency_groups=concurrency_groups,
+                timeout=timeout,
+                max_concurrent=max_concurrent,
+                reasoning_enabled=reasoning_enabled,
+                max_retries=max_retries,
+                retry_delay=retry_delay,
+                rate_limit_per_second=rate_limit_per_second,
+                rate_limit_per_minute=rate_limit_per_minute,
+                tpm=tpm,
+                model_error_handlers=model_error_handlers,
+            )

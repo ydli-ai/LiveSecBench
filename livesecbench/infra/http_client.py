@@ -247,7 +247,7 @@ class RetryableHTTPClient:
                         logger.error(f"{context_name}达到频率限制的最大重试次数。")
                         raise RuntimeError(f"{context_name}达到频率限制的最大重试次数")
                 
-                if status_code == 400:
+                if status_code in [400, 404]:
                     error_text = response.text
                     logger.error(f"{context_name}请求参数错误(400)，直接退出，不重试。body={error_text}")
                     output = json.loads(error_text, strict=False)
