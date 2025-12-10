@@ -361,59 +361,44 @@ async def batch_test_model(
             tasks.append(task)
             task_to_info[task] = (idx, item)
 
-        results = await asyncio.gather(*tasks, return_exceptions=True)
-        
-        for task, result in zip(tasks, results):
+        for completed_task in asyncio.as_completed(tasks):
             try:
-                if isinstance(result, Exception):
-                    idx = task_to_info.get(task, (0, {}))[0]
-                    category = task_to_info.get(task, (0, {}))[1].get('dimension', 'unknown')
-                    error_count += 1
-                    logger.error(f"[{idx}/{len(pending_questions)}] ✗ 异常 | 分类: {category} | 错误: {str(result)}")
-                    logger.error("异常文件: {}，所在行: {}，异常信息: {}".format(result.__traceback__.tb_frame.f_globals.get("__file__", "NULL"), result.__traceback__.tb_lineno, result.args))
-                    continue
+                result = await completed_task
                 
-                if task not in task_to_info:
+                if completed_task not in task_to_info:
                     logger.warning(f"任务不在task_to_info中，跳过")
                     continue
                     
-                idx, question = task_to_info[task]
+                idx, question = task_to_info[completed_task]
                 category = question.get('dimension')
 
                 if not result:
                     logger.warning(f"[{idx}/{len(pending_questions)}] 结果为空，跳过 | 分类: {category}")
-                    logger.debug(f"结果内容: {result}")
                     continue
                 
                 if result.get('status') == 'success':
-                    answer_preview = str(result.get('answer', ''))[:200]
-                    logger.info(f"[{idx}] 模型回答预览: {answer_preview}...")
-                
-                if result.get('status') == 'error':
-                    error_count += 1
-                    logger.info(f"[{idx}/{len(pending_questions)}] ✗ 失败 | 分类: {category} | "
-                          f"错误: {result.get('error', 'Unknown')}")
-                    continue
-
-                await storage.asave_model_output(result)
-
-                if result.get('status') == 'success':
+                    await storage.asave_model_output(result)
                     success_count += 1
                     total_time += result.get('consume_time', 0)
+                    answer_preview = str(result.get('answer', ''))[:200]
                     logger.info(f"[{idx}/{len(pending_questions)}] ✓ 成功 | 分类: {category} | "
                           f"耗时: {result.get('consume_time', 0):.2f}s | "
-                          f"已写入SQLite")
+                          f"已写入数据库: {result.get('id')} | 回答预览: {answer_preview}...")
                 else:
                     error_count += 1
                     logger.info(f"[{idx}/{len(pending_questions)}] ✗ 失败 | 分类: {category} | "
                           f"错误: {result.get('error', 'Unknown')}")
 
             except Exception as e:
-                idx = task_to_info.get(task, (0, {}))[0]
-                category = task_to_info.get(task, (0, {}))[1].get('dimension', 'unknown')
+                idx = task_to_info.get(completed_task, (0, {}))[0]
+                category = task_to_info.get(completed_task, (0, {}))[1].get('dimension', 'unknown')
                 error_count += 1
                 logger.error(f"[{idx}/{len(pending_questions)}] ✗ 异常 | 分类: {category} | 错误: {str(e)}")
-                logger.error("异常文件: {}，所在行: {}，异常信息: {}".format(e.__traceback__.tb_frame.f_globals.get("__file__", "NULL"), e.__traceback__.tb_lineno, e.args))
+                logger.error("异常文件: {}，所在行: {}，异常信息: {}".format(
+                    e.__traceback__.tb_frame.f_globals.get("__file__", "NULL"), 
+                    e.__traceback__.tb_lineno, 
+                    e.args
+                ))
 
     finally:
         pass
@@ -424,13 +409,103 @@ async def batch_test_model(
         logger.info(f"平均耗时: {total_time / success_count:.2f}s")
 
 
+async def execute_models_by_groups(
+    target_model_list: List[Dict[str, Any]],
+    all_questions: List[Dict[str, Any]],
+    storage: Any,
+    concurrency_groups: List[Dict],
+    timeout: int,
+    max_concurrent: int,
+    reasoning_enabled: bool,
+    max_retries: int,
+    retry_delay: int,
+    rate_limit_per_second: int,
+    rate_limit_per_minute: int,
+    tpm: int,
+    model_error_handlers: Optional[Dict] = None,
+) -> None:
+    """
+    根据并发分组配置执行模型推理
+    """
+    for group in concurrency_groups:
+        group_name = group.get('name', 'unnamed_group')
+        group_mode = group.get('mode', 'parallel')
+        group_organizations = group.get('organizations', [])
+        group_model_names = group.get('model_names', [])
+        
+        group_models = []
+        for model_item in target_model_list:
+            if 'api_config' not in model_item:
+                continue
+            
+            if group_organizations:
+                organization = model_item.get('organization', '')
+                if organization not in group_organizations:
+                    continue
+            
+            if group_model_names:
+                model_name = model_item.get('model_name')
+                if model_name not in group_model_names:
+                    continue
+            
+            group_models.append(model_item)
+        
+        if not group_models:
+            logger.info(f"并发分组 [{group_name}] 无匹配模型，跳过")
+            continue
+        
+        logger.info(f"开始执行并发分组 [{group_name}], 模式={group_mode}, 模型数={len(group_models)}")
+        
+        if group_mode == 'parallel':
+            # 并行执行该组内所有模型
+            tasks = []
+            for model_item in group_models:
+                task = batch_test_model(
+                    model_item,
+                    all_questions,
+                    storage=storage,
+                    timeout=timeout,
+                    max_concurrent=max_concurrent,
+                    reasoning_enabled=reasoning_enabled,
+                    max_retries=max_retries,
+                    retry_delay=retry_delay,
+                    global_rate_limit_per_second=rate_limit_per_second,
+                    global_rate_limit_per_minute=rate_limit_per_minute,
+                    global_tpm=tpm,
+                    model_error_handlers=model_error_handlers,
+                )
+                tasks.append(task)
+            await asyncio.gather(*tasks)
+            logger.info(f"并发分组 [{group_name}] 执行完成")
+        
+        elif group_mode == 'sequential':
+            # 串行执行该组内所有模型
+            for model_item in group_models:
+                logger.info(f"串行执行: {model_item.get('model_name')}")
+                await batch_test_model(
+                    model_item,
+                    all_questions,
+                    storage=storage,
+                    timeout=timeout,
+                    max_concurrent=max_concurrent,
+                    reasoning_enabled=reasoning_enabled,
+                    max_retries=max_retries,
+                    retry_delay=retry_delay,
+                    global_rate_limit_per_second=rate_limit_per_second,
+                    global_rate_limit_per_minute=rate_limit_per_minute,
+                    global_tpm=tpm,
+                    model_error_handlers=model_error_handlers,
+                )
+            logger.info(f"并发分组 [{group_name}] 串行执行完成")
+
+
 async def batch_gen_llm_answer(
     target_model_list: List[Dict[str, Any]],
     all_questions: List[Dict[str, Any]],
     config_manager: Optional[ConfigManager] = None,
     task_id: Optional[str] = None,
 ) -> None:
-    """批量生成所有模型的回答"""
+    """批量生成所有模型的回答，支持并发分组"""
     if config_manager is None:
         from livesecbench.infra.config import ConfigManager
         config_path = Path(__file__).resolve().parent.parent / "configs" / "run_custom_safety_benchmark.yaml"
@@ -451,22 +526,43 @@ async def batch_gen_llm_answer(
     
     model_error_handlers = config_manager.get_model_error_handlers()
     
-    for model_item in target_model_list:
-        if 'api_config' not in model_item:
-            logger.warning(f"模型 {model_item.get('model_name', 'unknown')} 缺少 api_config 配置，跳过")
-            continue
+    concurrency_groups = api_call_settings.get('concurrency_groups', [])
+    
+    if not concurrency_groups:
+        logger.info("未配置并发分组，将串行执行所有模型")
+        for model_item in target_model_list:
+            if 'api_config' not in model_item:
+                logger.warning(f"模型 {model_item.get('model_name', 'unknown')} 缺少 api_config 配置，跳过")
+                continue
 
-        await batch_test_model(
-            model_item,
-            all_questions,
+            await batch_test_model(
+                model_item,
+                all_questions,
+                storage=storage,
+                timeout=timeout,
+                max_concurrent=max_concurrent,
+                reasoning_enabled=reasoning_enabled,
+                max_retries=max_retries,
+                retry_delay=retry_delay,
+                global_rate_limit_per_second=rate_limit_per_second,
+                global_rate_limit_per_minute=rate_limit_per_minute,
+                global_tpm=tpm,
+                model_error_handlers=model_error_handlers,
+            )
+    else:
+        logger.info(f"使用并发分组配置，共 {len(concurrency_groups)} 个分组")
+        await execute_models_by_groups(
+            target_model_list=target_model_list,
+            all_questions=all_questions,
             storage=storage,
+            concurrency_groups=concurrency_groups,
             timeout=timeout,
             max_concurrent=max_concurrent,
             reasoning_enabled=reasoning_enabled,
             max_retries=max_retries,
             retry_delay=retry_delay,
-            global_rate_limit_per_second=rate_limit_per_second,
-            global_rate_limit_per_minute=rate_limit_per_minute,
-            global_tpm=tpm,
+            rate_limit_per_second=rate_limit_per_second,
+            rate_limit_per_minute=rate_limit_per_minute,
+            tpm=tpm,
             model_error_handlers=model_error_handlers,
         )
