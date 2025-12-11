@@ -142,11 +142,18 @@ async def pk(
     start_time = time.time()
     
     try:
+        identifier = {
+            'category': category,
+            'question': question[:50] if len(question) > 50 else question,
+            'model_A': model_A,
+            'model_B': model_B,
+        }
         output = await http_client.post(
             endpoint=endpoint,
             json_data=req_data,
             context_name="PK判别模型",
-            task_type="judge"
+            task_type="judge",
+            identifier=identifier
         )
         
         content = output['choices'][0]['message']['content']

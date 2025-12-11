@@ -197,10 +197,17 @@ class RetryableHTTPClient:
         headers: Optional[Dict[str, str]] = None,
         context_name: str = "请求",
         task_type: str = "general",  # 任务类型: "general"(普通), "judge"(判别), "answer"(回答)
+        identifier: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """发送POST请求（带重试机制）"""
         client = await self._get_client()
         url = endpoint.lstrip('/')
+        
+        identifier_str = ""
+        if identifier:
+            identifier_parts = [f"{k}={v}" for k, v in identifier.items() if v]
+            if identifier_parts:
+                identifier_str = f" | 标识: {', '.join(identifier_parts)}"
 
         default_headers = {
             "Authorization": f'Bearer {self.api_key}',
@@ -223,7 +230,7 @@ class RetryableHTTPClient:
                 
                 if status_code == 204:
                     error_text = response.text
-                    logger.warning(f"{context_name}返回 204 No Content，可能触发内容审查: {error_text}")
+                    logger.warning(f"{context_name}返回 204 No Content，可能触发内容审查{identifier_str}: {error_text}")
                     return {
                         'choices': [],
                         'error': {
@@ -238,18 +245,18 @@ class RetryableHTTPClient:
                     wait_time = self.retry_delay * (2 ** (attempt + 1))
                     logger.warning(
                         f"{context_name}遭遇限流(429)，第 {attempt + 1}/{self.max_retries} 次重试，"
-                        f"将在 {wait_time:.2f}s 后再次尝试。"
+                        f"将在 {wait_time:.2f}s 后再次尝试{identifier_str}。"
                     )
                     if attempt < self.max_retries - 1:
                         await asyncio.sleep(wait_time)
                         continue
                     else:
-                        logger.error(f"{context_name}达到频率限制的最大重试次数。")
+                        logger.error(f"{context_name}达到频率限制的最大重试次数{identifier_str}。")
                         raise RuntimeError(f"{context_name}达到频率限制的最大重试次数")
                 
                 if status_code in [400, 404]:
                     error_text = response.text
-                    logger.error(f"{context_name}请求参数错误(400)，直接退出，不重试。body={error_text}")
+                    logger.error(f"{context_name}请求参数错误({status_code})，直接退出，不重试{identifier_str}。body={error_text}")
                     output = json.loads(error_text, strict=False)
                     if 'error' in output and 'code' in output['error']:
                         error_code = output['error']['code']
@@ -265,43 +272,43 @@ class RetryableHTTPClient:
                         wait_time = 3600
                         logger.warning(
                             f"{context_name}遭遇余额不足(402)，判别任务将等待 {wait_time/60:.0f} 分钟后重试。"
-                            f"第 {attempt + 1}/{self.max_retries} 次重试。请及时充值！"
+                            f"第 {attempt + 1}/{self.max_retries} 次重试。请及时充值{identifier_str}！"
                         )
-                        logger.warning(f"错误详情: {error_text}")
+                        logger.warning(f"错误详情{identifier_str}: {error_text}")
                         
                         if attempt < self.max_retries - 1:
                             # 每隔5分钟打印一次提醒
                             for i in range(12):
                                 remaining_minutes = (12 - i) * 5
                                 if i == 0:
-                                    logger.info(f"等待中...剩余 {remaining_minutes} 分钟（可在此期间充值）")
+                                    logger.info(f"等待中...剩余 {remaining_minutes} 分钟（可在此期间充值）{identifier_str}")
                                 elif i % 3 == 0:
-                                    logger.info(f"仍在等待...剩余 {remaining_minutes} 分钟")
+                                    logger.info(f"仍在等待...剩余 {remaining_minutes} 分钟{identifier_str}")
                                 await asyncio.sleep(300)
-                            logger.info(f"等待结束，准备重试 {context_name}...")
+                            logger.info(f"等待结束，准备重试 {context_name}{identifier_str}...")
                             continue
                         else:
-                            logger.error(f"{context_name}达到最大重试次数，仍然余额不足。")
+                            logger.error(f"{context_name}达到最大重试次数，仍然余额不足{identifier_str}。")
                             raise RuntimeError(f"{context_name}余额不足(402)，已达到最大重试次数")
                     else:
                         logger.warning(
                             f"{context_name}遭遇余额不足(402)，任务类型: {task_type}。"
-                            f"第 {attempt + 1}/{self.max_retries} 次重试。"
+                            f"第 {attempt + 1}/{self.max_retries} 次重试{identifier_str}。"
                         )
-                        logger.warning(f"错误详情: {error_text}")
+                        logger.warning(f"错误详情{identifier_str}: {error_text}")
                         
                         if attempt < self.max_retries - 1:
                             wait_time = self.retry_delay * (2 ** attempt)
-                            logger.info(f"等待 {wait_time:.2f}s 后重试...")
+                            logger.info(f"等待 {wait_time:.2f}s 后重试{identifier_str}...")
                             await asyncio.sleep(wait_time)
                             continue
                         else:
-                            logger.error(f"{context_name}余额不足(402)，已达到最大重试次数。")
+                            logger.error(f"{context_name}余额不足(402)，已达到最大重试次数{identifier_str}。")
                             response.raise_for_status()
                 
                 if 401 <= status_code < 500:
                     error_text = response.text
-                    logger.error(f"{context_name}请求失败 status={status_code}, body={error_text}")
+                    logger.error(f"{context_name}请求失败 status={status_code}{identifier_str}, body={error_text}")
                     output = json.loads(error_text, strict=False)
                     if 'error' in output and 'code' in output['error']:
                         error_code = output['error']['code']
@@ -313,7 +320,7 @@ class RetryableHTTPClient:
                             return output['error']
                     if attempt < self.max_retries - 1:
                         wait_time = self.retry_delay * (2 ** attempt)
-                        logger.info(f"等待 {wait_time:.2f}s 后重试{context_name}...")
+                        logger.info(f"等待 {wait_time:.2f}s 后重试{context_name}{identifier_str}...")
                         await asyncio.sleep(wait_time)
                         continue
                     else:
@@ -321,7 +328,7 @@ class RetryableHTTPClient:
                 
                 if status_code >= 500:
                     error_text = response.text
-                    logger.warning(f"{context_name}服务器错误 status={status_code}, body={error_text}")
+                    logger.warning(f"{context_name}服务器错误 status={status_code}{identifier_str}, body={error_text}")
                     output = json.loads(error_text, strict=False)
                     if 'error' in output and 'code' in output['error']:
                         error_code = output['error']['code']
@@ -329,7 +336,7 @@ class RetryableHTTPClient:
                             return output['error']
                     if attempt < self.max_retries - 1:
                         wait_time = self.retry_delay * (2 ** attempt)
-                        logger.info(f"等待 {wait_time:.2f}s 后重试{context_name}...")
+                        logger.info(f"等待 {wait_time:.2f}s 后重试{context_name}{identifier_str}...")
                         await asyncio.sleep(wait_time)
                         continue
                     else:
@@ -356,7 +363,7 @@ class RetryableHTTPClient:
                     
                     if error_code == '400' or error_code == 400:
                         logger.error(
-                            f"{context_name}返回错误码400（请求参数错误），直接退出，不重试。"
+                            f"{context_name}返回错误码400（请求参数错误），直接退出，不重试{identifier_str}。"
                             f"错误信息: {error_message}"
                         )
                         raise RuntimeError(f"{context_name}返回400错误：{error_message}")
@@ -364,7 +371,7 @@ class RetryableHTTPClient:
                     if error_code == '429' or error_code == 429:
                         wait_time = self.retry_delay * (2 ** (attempt + 1))
                         logger.warning(
-                            f"{context_name}返回错误码429，准备降频重试，等待 {wait_time:.2f}s。"
+                            f"{context_name}返回错误码429，准备降频重试，等待 {wait_time:.2f}s{identifier_str}。"
                             f"错误信息: {error_message}"
                         )
                         if attempt < self.max_retries - 1:
@@ -373,11 +380,11 @@ class RetryableHTTPClient:
                         else:
                             raise RuntimeError(f"{context_name}返回429错误：{error_message}")
 
-                    logger.info(f"response output: {output}")
-                    logger.error(f"{context_name}返回错误：code={error_code}, message={error_message}")
+                    logger.info(f"response output{identifier_str}: {output}")
+                    logger.error(f"{context_name}返回错误{identifier_str}：code={error_code}, message={error_message}")
                     if attempt < self.max_retries - 1:
                         wait_time = self.retry_delay * (2 ** attempt)
-                        logger.info(f"等待 {wait_time:.2f}s 后重试{context_name}...")
+                        logger.info(f"等待 {wait_time:.2f}s 后重试{context_name}{identifier_str}...")
                         await asyncio.sleep(wait_time)
                         continue
                     else:
@@ -401,26 +408,26 @@ class RetryableHTTPClient:
                 
             except (httpx.ConnectError, httpx.ReadTimeout, httpx.WriteTimeout, httpx.PoolTimeout) as e:
                 logger.warning(
-                    f'{context_name}网络异常 (尝试 {attempt + 1}/{self.max_retries}): '
+                    f'{context_name}网络异常 (尝试 {attempt + 1}/{self.max_retries}){identifier_str}: '
                     f'{type(e).__name__} - {str(e)}'
                 )
                 if attempt < self.max_retries - 1:
                     wait_time = self.retry_delay * (2 ** attempt)
-                    logger.info(f'等待 {wait_time} 秒后重试...')
+                    logger.info(f'等待 {wait_time} 秒后重试{identifier_str}...')
                     await asyncio.sleep(wait_time)
                 else:
-                    logger.warning(f'{context_name}重试次数已用尽')
+                    logger.warning(f'{context_name}重试次数已用尽{identifier_str}')
                     raise
                     
             except httpx.HTTPStatusError as e:
                 if e.response.status_code >= 500:
                     logger.warning(
-                        f'{context_name}服务器错误 (尝试 {attempt + 1}/{self.max_retries}): '
+                        f'{context_name}服务器错误 (尝试 {attempt + 1}/{self.max_retries}){identifier_str}: '
                         f'{e.response.status_code}'
                     )
                     if attempt < self.max_retries - 1:
                         wait_time = self.retry_delay * (2 ** attempt)
-                        logger.info(f'等待 {wait_time} 秒后重试...')
+                        logger.info(f'等待 {wait_time} 秒后重试{identifier_str}...')
                         await asyncio.sleep(wait_time)
                     else:
                         raise
@@ -428,15 +435,15 @@ class RetryableHTTPClient:
                     raise
 
             except Exception as e:
-                logger.error(f'{context_name}请求异常: {type(e).__name__} - {str(e)}')
-                logger.error("异常文件: {}，所在行: {}，异常信息: {}".format(e.__traceback__.tb_frame.f_globals.get("__file__", "NULL"), e.__traceback__.tb_lineno, e.args))
-                logger.info(f"输入的请求body: {json_data}")
+                logger.error(f'{context_name}请求异常{identifier_str}: {type(e).__name__} - {str(e)}')
+                logger.error("异常文件: {}，所在行: {}，异常信息: {}{}".format(e.__traceback__.tb_frame.f_globals.get("__file__", "NULL"), e.__traceback__.tb_lineno, e.args, identifier_str))
+                logger.info(f"输入的请求body{identifier_str}: {json_data}")
                 if attempt < self.max_retries - 1:
                     wait_time = self.retry_delay * (2 ** attempt)
-                    logger.info(f'等待 {wait_time} 秒后重试...')
+                    logger.info(f'等待 {wait_time} 秒后重试{identifier_str}...')
                     await asyncio.sleep(wait_time)
                 else:
                     raise
         
-        raise RuntimeError(f"{context_name}失败，已重试 {self.max_retries} 次仍未成功")
+        raise RuntimeError(f"{context_name}失败{identifier_str}，已重试 {self.max_retries} 次仍未成功")
 

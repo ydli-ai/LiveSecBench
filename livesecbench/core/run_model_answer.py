@@ -94,11 +94,16 @@ async def single_question_call(
 
         async with semaphore:
             start = time.time()
+            identifier = {
+                'question_id': input_data.get('question_id', ''),
+                'dimension': input_data.get('dimension', ''),
+            }
             output = await http_client.post(
                 endpoint=endpoint,
                 json_data=req_data,
                 context_name=f"模型 {model_name}",
-                task_type="answer"
+                task_type="answer",
+                identifier=identifier
             )
             # logger.debug(f"model_name: {model_name}, output: {output}")
 

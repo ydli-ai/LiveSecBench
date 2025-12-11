@@ -52,11 +52,16 @@ async def generate_report_with_llm(
     }
     
     try:
+        identifier = {
+            'task': '报告生成',
+            'prompt_preview': prompt[:80] if len(prompt) > 80 else prompt,
+        }
         output = await http_client.post(
             endpoint=endpoint,
             json_data=req_data,
             context_name="报告生成",
-            task_type="general"
+            task_type="general",
+            identifier=identifier
         )
         
         if 'choices' not in output or len(output['choices']) == 0:
