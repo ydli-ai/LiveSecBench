@@ -336,13 +336,35 @@ async def batch_test_model(
         
         tasks = []
         completed_count = 0
+        image_source_priority = model_item.get('image_source_priority', 'url')
+        
         for idx, item in enumerate(pending_questions, 1):
             image_paths = None
             if enable_image_text:
                 if 'question_image' in item and isinstance(item['question_image'], list):
-                    image_paths = [img['file_path'] for img in item['question_image'] if 'file_path' in img]
+                    image_paths = []
+                    for img in item['question_image']:
+                        img_path = None
+                        
+                        if image_source_priority == 'url_only':
+                            if 'url' in img:
+                                img_path = img['url']
+                        elif image_source_priority == 'local_only':
+                            if 'file_path' in img:
+                                img_path = img['file_path']
+                        elif image_source_priority == 'url':
+                            img_path = img.get('url') or img.get('file_path')
+                        elif image_source_priority == 'local':
+                            img_path = img.get('file_path') or img.get('url')
+                        else:
+                            img_path = img.get('url') or img.get('file_path')
+                        
+                        if img_path:
+                            image_paths.append(img_path)
+                    
                     if image_paths:
-                        logger.debug(f"题目 {idx} 包含 {len(image_paths)} 张图片")
+                        source_type = "URL" if image_paths[0].startswith('http') else "本地文件"
+                        logger.debug(f"题目 {idx} 包含 {len(image_paths)} 张图片 (来源: {source_type})")
             coro = single_question_call(
                 http_client=http_client,
                 semaphore=semaphore,
