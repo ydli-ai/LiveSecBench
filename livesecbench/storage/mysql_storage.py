@@ -205,20 +205,33 @@ class MySQLStorage(BaseStorage):
         logger.info("MySQL 表结构已就绪")
     
     @staticmethod
-    def _compute_hash(text: str) -> str:
-        """计算文本的MD5哈希值"""
-        return hashlib.md5(text.encode()).hexdigest()
+    def _compute_hash(text: str, image_info: Optional[List[Dict]] = None) -> str:
+        """计算输入的MD5哈希值（包含文本和图片）"""
+        hash_input = text
+        
+        if image_info:
+            image_identifiers = []
+            for img in image_info:
+                identifier = img.get('md5') or img.get('url') or img.get('file_path')
+                if identifier:
+                    image_identifiers.append(identifier)
+            
+            if image_identifiers:
+                hash_input = text + ','.join(image_identifiers)
+        
+        return hashlib.md5(hash_input.encode()).hexdigest()
     
     def get_model_output(
         self, 
         model: str, 
         category: Optional[str], 
-        prompt: str
+        prompt: str,
+        image_info: Optional[List[Dict]] = None
     ) -> Optional[Dict[str, Any]]:
         """获取模型输出（同步）"""
         category_val = self._normalize_value(category)
         prompt_val = self._normalize_value(prompt)
-        prompt_hash = self._compute_hash(prompt)
+        prompt_hash = self._compute_hash(prompt, image_info)
         
         with self._connect() as conn:
             cursor = conn.cursor()
@@ -241,11 +254,12 @@ class MySQLStorage(BaseStorage):
         self, 
         model: str, 
         category: Optional[str], 
-        prompt: str
+        prompt: str,
+        image_info: Optional[List[Dict]] = None
     ) -> Optional[Dict[str, Any]]:
         """获取模型输出（异步）"""
         return await asyncio.to_thread(
-            self.get_model_output, model, category, prompt
+            self.get_model_output, model, category, prompt, image_info
         )
     
     def save_model_output(self, payload: Dict[str, Any]) -> None:
@@ -253,7 +267,9 @@ class MySQLStorage(BaseStorage):
         model = payload.get("model")
         category = self._normalize_value(payload.get("category"))
         prompt = self._normalize_value(payload.get("prompt"))
-        prompt_hash = self._compute_hash(prompt or "")
+        
+        image_info = payload.get("question_image")
+        prompt_hash = self._compute_hash(prompt or "", image_info)
         status = payload.get("status")
         now = int(time.time())
         created_at = payload.get("created_at")

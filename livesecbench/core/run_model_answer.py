@@ -312,10 +312,20 @@ async def batch_test_model(
     skipped_count = 0
 
     try:
+        enable_image_text = model_item.get('image_text_input', False)
+        
         for item in questions:
             prompt_text = item.get('question_text')
             category = item.get('dimension')
-            existing = await storage.aget_model_output(model_item['model'], category, prompt_text)
+            
+            image_info = item.get('question_image') if enable_image_text else None
+            
+            existing = await storage.aget_model_output(
+                model_item['model'], 
+                category, 
+                prompt_text,
+                image_info
+            )
             if existing and existing.get('status') == 'success':
                 skipped_count += 1
                 success_count += 1

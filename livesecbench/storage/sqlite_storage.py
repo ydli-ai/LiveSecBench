@@ -1,4 +1,5 @@
 import asyncio
+import hashlib
 import json
 import sqlite3
 import time
@@ -125,12 +126,32 @@ class SQLiteStorage(BaseStorage):
                 """
             )
 
-    def get_model_output(self, model: str, category: Optional[str], prompt: str) -> Optional[Dict[str, Any]]:
-        return self._get_model_output_sync(model, category, prompt)
+    @staticmethod
+    def _compute_hash(text: str, image_info: Optional[List[Dict]] = None) -> str:
+        """计算输入的MD5哈希值（包含文本和图片）"""
+        hash_input = text
+        
+        if image_info:
+            image_identifiers = []
+            for img in image_info:
+                identifier = img.get('md5') or img.get('url') or img.get('file_path')
+                if identifier:
+                    image_identifiers.append(identifier)
+            
+            if image_identifiers:
+                hash_input = text + ','.join(image_identifiers)
+        
+        return hashlib.md5(hash_input.encode()).hexdigest()
 
-    def _get_model_output_sync(self, model: str, category: Optional[str], prompt: str) -> Optional[Dict[str, Any]]:
+    def get_model_output(self, model: str, category: Optional[str], prompt: str, image_info: Optional[List[Dict]] = None) -> Optional[Dict[str, Any]]:
+        return self._get_model_output_sync(model, category, prompt, image_info)
+
+    def _get_model_output_sync(self, model: str, category: Optional[str], prompt: str, image_info: Optional[List[Dict]] = None) -> Optional[Dict[str, Any]]:
+        """获取模型输出（同步）"""
         category_val = self._normalize_value(category)
         prompt_val = self._normalize_value(prompt)
+        prompt_hash = self._compute_hash(prompt, image_info)
+        
         with self._connect() as conn:
             row = conn.execute(
                 f"""
@@ -145,8 +166,9 @@ class SQLiteStorage(BaseStorage):
             return None
         return json.loads(row["payload_json"])
 
-    async def aget_model_output(self, model: str, category: Optional[str], prompt: str) -> Optional[Dict[str, Any]]:
-        return await asyncio.to_thread(self._get_model_output_sync, model, category, prompt)
+    async def aget_model_output(self, model: str, category: Optional[str], prompt: str, image_info: Optional[List[Dict]] = None) -> Optional[Dict[str, Any]]:
+        """获取模型输出（异步）"""
+        return await asyncio.to_thread(self._get_model_output_sync, model, category, prompt, image_info)
 
     def save_model_output(self, payload: Dict[str, Any]) -> None:
         self._save_model_output_sync(payload)
