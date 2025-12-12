@@ -138,6 +138,7 @@ class ScoringOrchestrator:
     ) -> List[dict]:
         """执行一轮PK对战"""
         pk_tasks = []
+        skipped_count = 0
         for model_a, model_b in pairs:
             for question_data in questions:
                 category = question_data.get('category') or question_data.get('dimension')
@@ -150,6 +151,17 @@ class ScoringOrchestrator:
                 result_a = self.fetch_model_result(model_a, category, prompt) or {}
                 result_b = self.fetch_model_result(model_b, category, prompt) or {}
                 
+                answer_a = result_a.get('answer')
+                answer_b = result_b.get('answer')
+                
+                if not answer_a or not answer_b:
+                    skipped_count += 1
+                    self.logger.debug(
+                        f"跳过对战（缺少回答）: {model_a}{'(无答案)' if not answer_a else ''} vs "
+                        f"{model_b}{'(无答案)' if not answer_b else ''} | 题目: {prompt[:50]}..."
+                    )
+                    continue
+                
                 pk_tasks.append({
                     'evaluation_dimension': evaluation_dimension,
                     'category': category,
@@ -158,10 +170,13 @@ class ScoringOrchestrator:
                     'model_b': model_b,
                     'reasoning_a': result_a.get('reasoning'),
                     'reasoning_b': result_b.get('reasoning'),
-                    'answer_a': result_a.get('answer'),
-                    'answer_b': result_b.get('answer'),
+                    'answer_a': answer_a,
+                    'answer_b': answer_b,
                     'true_answer': result_a.get('true_answer') if result_a.get('true_answer', '') else None,
                 })
+        
+        if skipped_count > 0:
+            self.logger.info(f"本轮因缺少回答跳过了 {skipped_count} 个对战")
         
         pk_results = await self._execute_pks(pk_tasks, max_workers)
         updated_count = 0

@@ -130,6 +130,7 @@ def load_models_from_config_manager(config_manager: ConfigManager) -> list:
             'image_text_input': entry.get('image_text_input', False),
             'use_structured_content': entry.get('use_structured_content', False),
             'provider': provider,
+            'organization': entry.get('organization', ''),
             'api_config': api_config,
         }
         if model_item['model']:

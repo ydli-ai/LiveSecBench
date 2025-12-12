@@ -105,6 +105,7 @@ async def single_question_call(
                 task_type="answer",
                 identifier=identifier
             )
+            # logger.debug(f"req_data: {req_data}")
             # logger.debug(f"model_name: {model_name}, output: {output}")
 
         end = time.time()
