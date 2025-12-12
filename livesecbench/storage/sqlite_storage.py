@@ -64,6 +64,7 @@ class SQLiteStorage(BaseStorage):
                     model TEXT NOT NULL,
                     category TEXT,
                     prompt TEXT,
+                    prompt_hash TEXT,
                     status TEXT,
                     payload_json TEXT NOT NULL,
                     created_at INTEGER,
@@ -75,6 +76,11 @@ class SQLiteStorage(BaseStorage):
             
             try:
                 conn.execute(f"ALTER TABLE {self.model_outputs_table} ADD COLUMN task_id TEXT;")
+            except sqlite3.OperationalError:
+                pass
+            
+            try:
+                conn.execute(f"ALTER TABLE {self.model_outputs_table} ADD COLUMN prompt_hash TEXT;")
             except sqlite3.OperationalError:
                 pass
             
@@ -157,11 +163,23 @@ class SQLiteStorage(BaseStorage):
                 f"""
                 SELECT payload_json FROM {self.model_outputs_table}
                 WHERE model = ? AND category IS ?
-                      AND prompt = ?
+                      AND prompt_hash = ?
                 LIMIT 1;
                 """,
-                (model, category_val, prompt_val),
+                (model, category_val, prompt_hash),
             ).fetchone()
+            
+            if not row and not image_info:
+                row = conn.execute(
+                    f"""
+                    SELECT payload_json FROM {self.model_outputs_table}
+                    WHERE model = ? AND category IS ?
+                          AND prompt = ?
+                    LIMIT 1;
+                    """,
+                    (model, category_val, prompt_val),
+                ).fetchone()
+        
         if not row:
             return None
         return json.loads(row["payload_json"])
@@ -183,6 +201,9 @@ class SQLiteStorage(BaseStorage):
         created_ts = created_at if isinstance(created_at, int) else now
         data_json = json.dumps(payload, ensure_ascii=False)
         task_id = self.task_id or payload.get("task_id")
+        
+        image_info = payload.get("question_image") or payload.get("image_paths")
+        prompt_hash = self._compute_hash(prompt or "", image_info)
 
         max_retries = 5
         for attempt in range(max_retries):
@@ -191,11 +212,12 @@ class SQLiteStorage(BaseStorage):
                     conn.execute(
                         f"""
                         INSERT INTO {self.model_outputs_table}
-                            (task_id, model_name, model, category, prompt, status, payload_json, created_at, updated_at)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                            (task_id, model_name, model, category, prompt, prompt_hash, status, payload_json, created_at, updated_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                         ON CONFLICT(model, category, prompt) DO UPDATE SET
                             task_id=excluded.task_id,
                             model_name=excluded.model_name,
+                            prompt_hash=excluded.prompt_hash,
                             status=excluded.status,
                             payload_json=excluded.payload_json,
                             updated_at=excluded.updated_at;
@@ -206,6 +228,7 @@ class SQLiteStorage(BaseStorage):
                             model,
                             category,
                             prompt,
+                            prompt_hash,
                             status,
                             data_json,
                             created_ts,

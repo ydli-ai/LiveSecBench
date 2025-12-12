@@ -1,7 +1,7 @@
 import importlib
 import json
 import time
-from typing import Optional, Tuple, Dict, Any, Callable
+from typing import Optional, Tuple, Dict, Any, Callable, List
 
 from livesecbench.infra.config import ConfigManager
 from livesecbench.infra.http_client import RetryableHTTPClient
@@ -108,15 +108,51 @@ async def pk(
     answer_B: str,
     true_answer: Optional[str] = None,
     endpoint: str = "chat/completions",
+    sub_dimension: Optional[str] = None,
+    sub_dimension_templates: Optional[Dict[str, str]] = None,
+    image_md5: Optional[str] = None,
+    ground_truth_image_desc: Optional[str] = None,
 ) -> Tuple[Optional[str], bool, float, Optional[str], Dict[str, Any]]:
     """进行模型A和模型B的PK，返回获胜模型"""
     output_A = answer_A
     output_B = answer_B
 
+    if evaluation_dimension in ('cross_modal', '跨模态安全') and sub_dimension and sub_dimension_templates:
+        template_key = f"{sub_dimension}_criteria_template"
+        if template_key in sub_dimension_templates:
+            evaluate_prompt_template = sub_dimension_templates[template_key]
+            logger.info(f"跨模态评测使用子维度模板: {sub_dimension}")
+
     if evaluation_dimension in ('事实性', 'factuality'):
         prompt = evaluate_prompt_template.format(question, true_answer, output_A, output_B)
     elif evaluation_dimension in ('reasoning', '推理安全'):
         prompt = evaluate_prompt_template.format(question, reasoning_A, reasoning_B)
+    elif evaluation_dimension in ('cross_modal', '跨模态安全'):
+        image_info = ""
+        if ground_truth_image_desc:
+            ground_truth_image_data = json.loads(ground_truth_image_desc, strict=False)
+            summary = ground_truth_image_data.get('summary', '')
+            if summary:
+                image_info += f"【图片内容概览】: {summary}"
+            ocr_text = ground_truth_image_data.get('ocr_text', '')
+            if ocr_text:
+                image_info += f"\n【OCR文字提取】: {ocr_text}"
+            visual_details = ground_truth_image_data.get('visual_details', '')
+            if visual_details:
+                image_info += f"\n【视觉细节描述】: {visual_details}"
+            risk_tags = ground_truth_image_data.get('risk_tags', '')
+            if risk_tags:
+                image_info += f"\n【风险标签】: {risk_tags}"
+            safety_analysis = ground_truth_image_data.get('safety_analysis', {})
+            if safety_analysis:
+                image_info += f"\n【安全分析】: {safety_analysis.get(sub_dimension, '')}"
+        else:
+            image_info = "无图片信息"
+        
+        if sub_dimension in ('事实性', 'factuality'):
+            prompt = evaluate_prompt_template.format(image_info, question, true_answer, output_A, output_B)
+        else:
+            prompt = evaluate_prompt_template.format(image_info, question, output_A, output_B)
     else:
         prompt = evaluate_prompt_template.format(question, output_A, output_B)
 
@@ -215,6 +251,7 @@ def create_pk_runner(
     judge_model: str,
     storage: BaseStorage,
     judge_api_config: Dict[str, Any],
+    sub_dimension_templates: Optional[Dict[str, str]] = None,
 ) -> Callable:
     """创建PK运行器，返回一个异步函数包装器"""
     base_url = judge_api_config.get('base_url', 'https://api.deepseek.com/v1')
@@ -246,6 +283,9 @@ def create_pk_runner(
         answer_A: str,
         answer_B: str,
         true_answer: Optional[str] = None,
+        sub_dimension: Optional[str] = None,
+        image_md5: Optional[str] = None,
+        ground_truth_image_desc: Optional[str] = None,
     ):
         return await pk(
             http_client=http_client,
@@ -263,14 +303,18 @@ def create_pk_runner(
             answer_B=answer_B,
             true_answer=true_answer,
             endpoint=endpoint,
+            sub_dimension=sub_dimension,
+            sub_dimension_templates=sub_dimension_templates,
+            image_md5=image_md5,
+            ground_truth_image_desc=ground_truth_image_desc,
         )
     return pk_wrapper
 
 
-def build_model_result_fetcher(storage: BaseStorage) -> Callable[[str, str, str], Optional[Dict[str, Any]]]:
+def build_model_result_fetcher(storage: BaseStorage) -> Callable:
     """模型结果获取函数"""
-    def _fetch(model: str, category: str, prompt: str) -> Optional[Dict[str, Any]]:
-        return storage.get_model_output(model, category, prompt)
+    def _fetch(model: str, category: str, prompt: str, image_info: Optional[List[Dict]] = None) -> Optional[Dict[str, Any]]:
+        return storage.get_model_output(model, category, prompt, image_info)
 
     return _fetch
 
@@ -363,9 +407,24 @@ async def launch_evaluation(
             continue
 
         criteria_template = params.get('criteria_template')
-        if not criteria_template:
-            logger.warning(f"{dimension}: 缺少criteria_template，跳过该维度。")
-            continue
+        sub_dimension_templates = None
+        
+        if dimension in ('cross_modal', '跨模态安全'):
+            sub_dimension_templates = {}
+            for key, value in params.items():
+                if key.endswith('_criteria_template'):
+                    sub_dimension_templates[key] = value
+            
+            if not sub_dimension_templates:
+                logger.warning(f"{dimension}: 缺少子维度模板（*_criteria_template），跳过该维度。")
+                continue
+            
+            logger.info(f"{dimension}: 找到 {len(sub_dimension_templates)} 个子维度模板")
+            criteria_template = criteria_template or list(sub_dimension_templates.values())[0]
+        else:
+            if not criteria_template:
+                logger.warning(f"{dimension}: 缺少criteria_template，跳过该维度。")
+                continue
 
         try:
             elo_settings = merge_elo_settings(global_elo_settings, params.get('elo'))
@@ -382,14 +441,14 @@ async def launch_evaluation(
             logger.warning(f"{dimension}: 未配置judge_model，跳过该维度。")
             continue
 
-        pk_runner = create_pk_runner(criteria_template, judge_model, storage, final_judge_api_config)
+        pk_runner = create_pk_runner(criteria_template, judge_model, storage, final_judge_api_config, sub_dimension_templates)
         runtime_context = {
             'logger': logger,
             'pk_runner': pk_runner,
             'fetch_model_result': fetch_model_result,
             'elo_settings': elo_settings,
-            'task_manager': task_manager,  # 传递任务管理器
-            'config_manager': config_manager,  # 传递配置管理器，用于获取输出路径
+            'task_manager': task_manager,
+            'config_manager': config_manager,
         }
 
         scorer_fn = load_scorer(scorer_name)

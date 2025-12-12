@@ -148,8 +148,14 @@ class ScoringOrchestrator:
                     self.logger.warning(f"题目缺少prompt/question/question_text字段，跳过: {question_data.keys()}")
                     continue
                 
-                result_a = self.fetch_model_result(model_a, category, prompt) or {}
-                result_b = self.fetch_model_result(model_b, category, prompt) or {}
+                image_info = None
+                if evaluation_dimension in ('cross_modal', '跨模态安全'):
+                    question_images = question_data.get('question_image', [])
+                    if question_images and isinstance(question_images, list):
+                        image_info = question_images
+                
+                result_a = self.fetch_model_result(model_a, category, prompt, image_info) or {}
+                result_b = self.fetch_model_result(model_b, category, prompt, image_info) or {}
                 
                 answer_a = result_a.get('answer')
                 answer_b = result_b.get('answer')
@@ -162,7 +168,7 @@ class ScoringOrchestrator:
                     )
                     continue
                 
-                pk_tasks.append({
+                task = {
                     'evaluation_dimension': evaluation_dimension,
                     'category': category,
                     'prompt': prompt,
@@ -173,7 +179,18 @@ class ScoringOrchestrator:
                     'answer_a': answer_a,
                     'answer_b': answer_b,
                     'true_answer': result_a.get('true_answer') if result_a.get('true_answer', '') else None,
-                })
+                }
+                
+                if evaluation_dimension in ('cross_modal', '跨模态安全'):
+                    task['sub_dimension'] = question_data.get('sub_dimension')
+                    
+                    question_images = question_data.get('question_image', [])
+                    if question_images and isinstance(question_images, list) and len(question_images) > 0:
+                        first_image = question_images[0]
+                        task['image_md5'] = first_image.get('md5')
+                        task['ground_truth_image_desc'] = first_image.get('ground_truth_image_desc')
+                
+                pk_tasks.append(task)
         
         if skipped_count > 0:
             self.logger.info(f"本轮因缺少回答跳过了 {skipped_count} 个对战")
@@ -236,18 +253,30 @@ class ScoringOrchestrator:
             """执行单个PK任务"""
             async with semaphore:
                 try:
-                    winner, is_new, consume_time, content, pk_result = await self.pk_runner(
-                        evaluation_dimension=task['evaluation_dimension'],
-                        category=task['category'],
-                        question=task['prompt'],
-                        model_A=task['model_a'],
-                        model_B=task['model_b'],
-                        reasoning_A=task['reasoning_a'],
-                        reasoning_B=task['reasoning_b'],
-                        answer_A=task['answer_a'],
-                        answer_B=task['answer_b'],
-                        true_answer=task['true_answer'],
-                    )
+                    # 构建pk_runner的参数
+                    pk_params = {
+                        'evaluation_dimension': task['evaluation_dimension'],
+                        'category': task['category'],
+                        'question': task['prompt'],
+                        'model_A': task['model_a'],
+                        'model_B': task['model_b'],
+                        'reasoning_A': task['reasoning_a'],
+                        'reasoning_B': task['reasoning_b'],
+                        'answer_A': task['answer_a'],
+                        'answer_B': task['answer_b'],
+                        'true_answer': task['true_answer'],
+                    }
+                    
+                    # 对于跨模态评测，添加额外参数
+                    if 'sub_dimension' in task:
+                        pk_params['sub_dimension'] = task['sub_dimension']
+                    if 'image_md5' in task:
+                        pk_params['image_md5'] = task['image_md5']
+                    if 'ground_truth_image_desc' in task:
+                        pk_params['ground_truth_image_desc'] = task['ground_truth_image_desc']
+                    
+                    winner, is_new, consume_time, content, pk_result = await self.pk_runner(**pk_params)
+                    
                     if pk_result and isinstance(pk_result, dict):
                         return pk_result
                     elif winner:
