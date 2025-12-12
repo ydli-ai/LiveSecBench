@@ -406,7 +406,7 @@ class RetryableHTTPClient:
 
                 return output
                 
-            except (httpx.ConnectError, httpx.ReadTimeout, httpx.WriteTimeout, httpx.PoolTimeout) as e:
+            except (httpx.ConnectError, httpx.ConnectTimeout, httpx.ReadTimeout, httpx.ReadError, httpx.WriteTimeout, httpx.PoolTimeout) as e:
                 logger.warning(
                     f'{context_name}网络异常 (尝试 {attempt + 1}/{self.max_retries}){identifier_str}: '
                     f'{type(e).__name__} - {str(e)}'
