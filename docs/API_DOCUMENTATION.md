@@ -35,11 +35,26 @@ question_selection = cm.get_question_selection()
 # 评分 / 存储
 elo_settings = cm.get_elo_settings()
 scoring_config = cm.get_scoring_config()
-db_path = cm.get_storage_db_path()
+storage_type = cm.get_storage_type()        # 'sqlite' 或 'mysql'
+db_path = cm.get_storage_db_path()          # SQLite路径
 tables = cm.get_storage_tables()            # {'model_outputs_table': 'model_outputs', ...}
+mysql_config = cm.get_mysql_config()        # MySQL配置（如使用MySQL）
+
+# API调用设置
+api_settings = cm.get_api_call_settings()   # 超时、并发、重试等配置
 
 # 裁判模型配置（自动解析 env_var）
 judge_api = cm.get_judge_model_api()
+
+# 模型错误处理配置
+error_handlers = cm.get_model_error_handlers()
+
+# 报告设置
+report_settings = cm.get_report_settings()
+report_template = cm.get_report_prompt_template()
+
+# 模型名称映射
+model_name_map = cm.get_model_name_map()    # {model_id: model_name}
 
 # 校验配置
 errors = cm.validate_config()
@@ -50,6 +65,8 @@ if errors:
 特点：
 - `env_var:VARIABLE_NAME` 会在读取阶段自动解析，不需要手动处理。
 - 所有 getter 均返回结构化字段，减少对原始 dict 的依赖。
+- 支持 SQLite 和 MySQL 双存储后端。
+- 新增 `get_model_name_map()` 方法，便于模型ID到名称的映射。
 
 ### 1.2 TaskManager
 **位置**：`livesecbench/core/task_manager.py`
@@ -79,11 +96,18 @@ import asyncio
 from livesecbench.infra.http_client import RetryableHTTPClient, RateLimiter
 
 async def call_model():
-    limiter = RateLimiter(per_second=5, per_minute=60)
+    # 支持每秒请求数、每分钟请求数和每分钟Token数（TPM）限制
+    limiter = RateLimiter(
+        per_second=5, 
+        per_minute=60,
+        tokens_per_minute=100000,  # TPM限流
+        estimated_tokens_per_request=4000  # 预估每请求token数
+    )
+    
     client = RetryableHTTPClient(
         base_url="https://api.openai.com/v1",
         api_key="env_var:OPENAI_API_KEY",  # 支持 env_var
-        timeout=120,
+        timeout=600,  # 超时时间
         max_retries=5,
         retry_delay=1,
         rate_limiter=limiter,
@@ -96,7 +120,14 @@ async def call_model():
             "messages": [{"role": "user", "content": "Hello"}],
         },
         context_name="demo call",
+        task_type="general",  # 任务类型: "general", "judge", "answer"
+        identifier={"model": "gpt-4", "dimension": "ethics"},  # 请求标识
     )
+    
+    # TPM精确统计（在请求完成后调用）
+    actual_tokens = resp.get('usage', {}).get('total_tokens', 0)
+    await limiter.register_tokens(actual_tokens)
+    
     return resp["choices"][0]["message"]["content"]
 
 asyncio.run(call_model())
@@ -105,6 +136,12 @@ asyncio.run(call_model())
 要点：
 - 客户端自动记录上下文日志，并在 HTTP 失败时进行指数退避重试。
 - `context_name` 会出现在日志中，便于定位具体模型或请求。
+- `identifier`参数用于在日志中标识请求来源。
+- `task_type`参数区分不同类型的任务。
+- 支持TPM（每分钟Token数）限流，采用预估+精确统计策略。
+- 自动处理HTTP 204（内容审查）和429（限流）响应。
+- **新增**：支持为单个模型设置独立的RPM、TPM和并发限制。
+- **新增**：支持模型API切换功能，可在不同API端点间切换。
 
 ---
 
@@ -140,15 +177,29 @@ def expensive_call(arg):
 
 ---
 
-## 4. SQLite 存储接口
+## 4. 存储接口
 
-**位置**：`livesecbench/storage/sqlite_storage.py`
+**位置**：`livesecbench/storage/sqlite_storage.py` 或 `livesecbench/storage/mysql_storage.py`
 
 ```python
 from livesecbench.storage.sqlite_storage import SQLiteStorage
+# 或
+from livesecbench.storage.mysql_storage import MySQLStorage
 
+# SQLite 示例
 storage = SQLiteStorage(
     db_path="data/livesecbench.db",
+    model_outputs_table="model_outputs",
+    pk_results_table="pk_results",
+    task_id="20251118_120001",
+)
+
+# MySQL 示例
+storage = MySQLStorage(
+    host="localhost",
+    user="username",
+    password="env_var:MYSQL_PASSWORD",  # 支持 env_var
+    database="livesecbench",
     model_outputs_table="model_outputs",
     pk_results_table="pk_results",
     task_id="20251118_120001",
@@ -177,6 +228,15 @@ storage.save_task_info(task_id=storage.task_id, task_info=task_manager.get_task_
 常用字段：
 - `payload_json`：原始模型响应/PK 详情（JSON 字符串）。
 - `consume_time`、`prompt_tokens`、`completion_tokens`：便于统计成本。
+- 支持图像信息存储，适配多模态数据集。
+
+**存储工厂**：
+```python
+from livesecbench.storage import StorageFactory
+
+# 根据配置自动创建适配的存储实例
+storage = StorageFactory.create_from_config(config_manager)
+```
 
 ---
 
@@ -233,11 +293,94 @@ async def score(
 
 自定义评分器可复用上述上下文，只需返回包含 `history_path` / `result_path` / `record_path` 的字典。
 
+### 5.3 排名变化追踪
+**位置**：`livesecbench/core/rank.py`
+
+```python
+from livesecbench.core.rank import RankManager
+
+rank_manager = RankManager()
+# 计算排名变化
+rank_changes = rank_manager.calculate_rank_changes(current_results, previous_results)
+# 生生排名报告
+report = rank_manager.generate_rank_report(rank_changes)
+```
+
 ---
 
-## 6. 日志与辅助工具
+## 6. 多模态支持
 
-### 6.1 Logger
+### 6.1 图像输入处理
+**位置**：`livesecbench/core/run_model_answer.py`
+
+```python
+# 支持多种图像格式：本地文件、URL、base64
+image_input = {
+    "type": "image_url",
+    "image_url": {
+        "url": "https://example.com/image.jpg"  # 支持URL格式
+    }
+}
+
+# 或本地文件
+image_input = {
+    "type": "image_path",
+    "image_path": "/path/to/image.jpg"
+}
+
+# 多图像输入
+messages = [
+    {
+        "role": "user",
+        "content": [
+            {"type": "text", "text": "描述这张图片"},
+            {"type": "image_url", "image_url": {"url": "https://example.com/image1.jpg"}},
+            {"type": "image_url", "image_url": {"url": "https://example.com/image2.jpg"}}
+        ]
+    }
+]
+```
+
+### 6.2 结构化文本输入
+**位置**：`livesecbench/core/run_model_answer.py`
+
+```python
+# 适配结构化文本格式
+structured_input = {
+    "question": "原始问题",
+    "context": "相关背景信息",
+    "metadata": {
+        "difficulty": "high",
+        "category": "reasoning"
+    }
+}
+
+# 自动提取子维度问题
+sub_dimension_questions = extract_questions_by_sub_dimension(
+    dimension="ethics",
+    sub_dimension="privacy",
+    questions=dataset
+)
+```
+
+### 6.3 上下文窗口管理
+**位置**：`livesecbench/utils/token_util.py`
+
+```python
+from livesecbench.utils.token_util import TokenUtil
+
+# 检查并处理上下文溢出
+token_util = TokenUtil(model_name="deepseek-chat")
+if token_util.is_context_overflow(prompt, max_tokens=32000):
+    # 自动截断或重新格式化
+    processed_prompt = token_util.truncate_to_fit(prompt, max_tokens=32000)
+```
+
+---
+
+## 7. 日志与辅助工具
+
+### 7.1 Logger
 **位置**：`livesecbench/utils/logger.py`
 
 ```python
@@ -252,14 +395,14 @@ logger.error("error", exc_info=True)
 
 日志默认输出到控制台及 `livesecbench/logs/YYYY_MM_DD.log`。
 
-### 6.2 环境变量加载
+### 7.2 环境变量加载
 **位置**：`livesecbench/utils/env_loader.py`
 
 `load_project_env()` 会在核心模块 import 时自动执行，支持 `.env` 文件与系统环境变量。
 
 ---
 
-## 7. 参考资料
+## 8. 参考资料
 
 - `README.md` / `README_EN.md`：项目简介与快速开始
 - `docs/USER_GUIDE.md`：操作指南与最佳实践

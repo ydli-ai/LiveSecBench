@@ -23,11 +23,15 @@ Scan to join the LiveSecBench WeChat group for the latest updates and technical 
 
 ## Highlights
 
-- Real-world context: question sets capture explicit and implicit risks in Chinese scenarios.
-- Duel-style scoring: Swiss / round-robin / random pairing modes with optional convergence detection.
-- Traceable tasks: evaluation metadata, model outputs, and PK logs persist in SQLite for audits.
-- Automated reports: rankings, statistical summaries, and Markdown reports for downstream sharing.
-- Offline demo: a mock script reproduces the whole workflow without external API keys.
+- **Real-world context**: question sets capture explicit and implicit risks in Chinese scenarios.
+- **Duel-style scoring**: Swiss / round-robin / random pairing modes with optional convergence detection.
+- **Traceable tasks**: evaluation metadata, model outputs, and PK logs persist in SQLite/MySQL for audits.
+- **Automated reports**: rankings, statistical summaries, and Markdown reports for downstream sharing.
+- **Offline demo**: a mock script reproduces the whole workflow without external API keys.
+- **🚀 New: Concurrency Groups** - Support parallel/sequential/hybrid execution strategies for significant efficiency improvement
+- **🚀 New: Real-time Data Persistence** - Immediate database write after each API call, supporting checkpoint resume
+- **🚀 New: Image Input Support** - Support URL and base64 format image input, with multi-image support
+- **🚀 New: MySQL Storage** - Optional MySQL storage to solve high-concurrency write performance issues
 
 ## Quick Start
 

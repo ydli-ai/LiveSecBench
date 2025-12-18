@@ -11,7 +11,8 @@
 3. [自定义评分与判别逻辑](#3-自定义评分与判别逻辑)
 4. [访问结果与数据库](#4-访问结果与数据库)
 5. [批量任务与 Mock 演示](#5-批量任务与-mock-演示)
-6. [更多参考](#6-更多参考)
+6. [高级功能示例](#6-高级功能示例)
+7. [更多参考](#7-更多参考)
 
 ---
 
@@ -77,6 +78,24 @@ model_id_prefixes_to_remove:
 ```
 `run_model_answer.py` 会自动读取这些字段，在响应缺失或模型 ID 过长时提供 fallback。
 
+### 2.4 图片输入支持
+```yaml
+models_to_test:
+  - model_name: "GPT-4V"
+    image_text_input: true  # 启用图片输入
+    image_source_priority: url  # 优先使用 CDN URL
+    api_config:
+      base_url: "https://api.openai.com/v1"
+      end_point: "/chat/completions"  # 可自定义 API 路由
+      max_concurrent: 5
+      rpm: 60
+      tpm: 50000  # 每分钟 token 限制
+```
+- `image_text_input`: 是否支持图文混合输入
+- `image_source_priority`: 图片来源优先级 (`url` 或 `local`)
+- `end_point`: 可自定义 API 路由，适配不同平台
+- `rpm`/`tpm`: 精细化控制 API 调用速率
+
 ---
 
 ## 3. 自定义评分与判别逻辑
@@ -122,7 +141,30 @@ scoring_config:
       custom_param: "value"
 ```
 
-### 3.2 切换裁判模型
+### 3.2 跨模态评分配置
+```yaml
+scoring_config:
+  - dimension: "cross_modal"
+    scorer: "model_based_scorer"
+    params:
+      legality_criteria_template: |
+        你是一个专业的AI跨模态安全评测裁判...
+        图片内容描述：{}
+        文本问题：{}
+        模型A回复：{}  
+        模型B回复：{}
+        
+      ethics_criteria_template: |
+        你是一个专业的AI跨模态安全评测裁判...
+        图片内容描述：{}
+        文本问题：{}
+        模垊A回复：{}  
+        模型B回复：{}
+```
+- 支持为每个子维度定义专门的评估提示词
+- 支持图片描述、标准答案等多个参数
+
+### 3.3 切换裁判模型
 ```yaml
 judge_model_api:
   base_url: "https://api.myjudge.com/v1"
@@ -131,7 +173,16 @@ judge_model_api:
   timeout: 90
   max_retries: 3
   rate_limit_per_second: 3
+  
+  # 备用大上下文模型
+  fallback:
+    base_url: "https://openrouter.ai/api/v1"
+    api_key: "env_var:GEMINI_API_KEY"
+    model: "gemini-2.5-flash"
+    max_tokens: 1048576
 ```
+- 支持配置备用模型，当主裁判模型失败时自动切换
+- 备用模型可配置更大的 `max_tokens` 适应长上下文
 
 ---
 
@@ -213,7 +264,88 @@ pytest -k http_client -v       # 验证 HTTP/重试逻辑
 
 ---
 
-## 6. 更多参考
+## 6. 高级功能示例
+
+### 6.1 并发分组调度
+```yaml
+api_call_settings:
+  concurrency_groups:
+    # 第一组：远程API并行组
+    - name: "远程API并行组"
+      mode: "parallel"
+      organizations:
+        - CompanyA
+        - CompanyB
+    
+    # 第二组：本地模型串行组
+    - name: "本地模型串行组"
+      mode: "sequential"
+      organizations:
+        - CompanyC
+        - CompanyD
+```
+- `mode: parallel`: 组内模型并行执行（适合不同厂商的API）
+- `mode: sequential`: 组内模型串行执行（适合共享资源的本地模型）
+- 各分组按配置顺序串行执行，避免资源竞争
+
+### 6.2 收敛性检测配置
+```yaml
+scoring_settings:
+  model_based:
+    elo:
+      convergence:
+        enabled: true
+        type: "adaptive"
+        threshold: 0.01
+        min_stable_rounds: 3
+        min_rounds: 5
+```
+- 当评分变化和排名波动低于阀值并保持若干轮后，自动提前结束
+- 节约 API 调用成本，特别适合大规模评测
+
+### 6.3 MySQL 存储配置
+```yaml
+storage:
+  type: "mysql"
+  
+  mysql:
+    host: "localhost"
+    port: 3306
+    user: "livesec_user"
+    password: "env_var:MYSQL_PASSWORD"
+    database: "livesecbench"
+    charset: "utf8mb4"
+    pool_size: 10
+    max_overflow: 20
+    pool_timeout: 30
+  
+  tables:
+    model_outputs: "model_outputs"
+    pk_results: "pk_results"
+    tasks: "evaluation_tasks"
+```
+- 支持切换到 MySQL 存储，适合高并发场景
+- 配置连接池参数，优化性能
+- 支持从环境变量读取密码，增强安全性
+
+### 6.4 固定随机种子
+```yaml
+question_selection:
+  - dimension: "cross_modal"
+    question_sets: ["cross_modal"]
+    random_seed: 42  # 固定随机种子
+    sub_dimension_limits:
+      legality: 50
+      ethics: 50
+      factuality: 50
+      privacy: 50
+```
+- 设置 `random_seed` 确保题目抽样可复现
+- 支持按子维度限制题目数量，灵活控制评测规模
+
+---
+
+## 7. 更多参考
 
 - `docs/USER_GUIDE.md`：完整操作流程、最佳实践与故障排查。
 - `docs/API_DOCUMENTATION.md`：更细的 API 说明（ConfigManager、HTTP 客户端、评分框架等）。
