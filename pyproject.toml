@@ -1,6 +1,6 @@
 [project]
 name = "livesecbench"
-version = "0.0.1"
+version = "0.1.1"
 description = "LiveSecBench - 大模型动态安全基准测试框架"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -30,6 +30,9 @@ dependencies = [
     "python-dotenv>=1.2.1",
     "PyYAML>=6.0.3",
     "openpyxl>=3.1.0",
+    "pymysql>=1.0.2",
+    "DBUtils>=3.0.3",
+    "transformers>=4.57.3",
 ]
 
 [project.optional-dependencies]

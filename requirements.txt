@@ -12,3 +12,4 @@ pytest-asyncio>=0.24.0
 openpyxl>=3.1.0  # 用于导出Excel文件（PK详情记录）
 pymysql>=1.0.2
 DBUtils>=3.0.3
+transformers>=4.57.3  # 精确 Token 计数
