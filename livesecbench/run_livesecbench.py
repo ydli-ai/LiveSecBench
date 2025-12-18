@@ -207,4 +207,12 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except KeyboardInterrupt:
+        logger.warning("程序被用户中断")
+    except Exception as e:
+        logger.error(f"程序执行过程中发生未捕获的异常: {e}")
+        import traceback
+        logger.error(f"异常堆栈信息:\n{traceback.format_exc()}")
+        raise
