@@ -79,18 +79,33 @@ livesecbench/
 ├── infra/
 │   ├── config/                  # ConfigManager、schema 校验与 env 解析
 │   ├── scoring/                 # 配对策略、ELO、收敛检测、调度器
+│   │   ├── scoring_orchestrator.py    # 评分编排器
+│   │   ├── pairing_strategies.py      # 配对策略（瑞士制/单循环/随机）
+│   │   ├── rating_algorithms.py       # 评分算法（ELO）
+│   │   └── convergence_detector.py      # 收敛检测
 │   ├── http_client.py           # RetryableHTTPClient + RateLimiter
 │   ├── batch_processor.py       # 协程批处理、失败重试
 │   └── cache_manager.py         # 可选缓存（内存/磁盘）
 ├── storage/
-│   └── sqlite_storage.py        # 模型输出、PK、任务记录
+│   ├── base_storage.py          # 存储抽象基类
+│   ├── sqlite_storage.py        # SQLite 实现
+│   ├── mysql_storage.py         # MySQL 实现
+│   └── storage_factory.py       # 存储工厂
 ├── scorers/
 │   └── model_based_scorer.py    # 默认裁判模型评分器
 ├── question_set/                # 各安全维度题库
 ├── configs/                     # 运行配置与 mock 配置
-├── utils/                       # 日志、环境变量加载
-└── scripts/
-    └── run_mock_e2e.py          # 离线端到端演示
+├── utils/                       # 日志、环境变量加载、Token计数
+│   ├── logger.py                # 统一日志配置
+│   ├── env_loader.py            # 环境变量加载
+│   └── token_util.py            # Token计数工具
+├── scripts/                     # 辅助脚本
+│   ├── run_mock_e2e.py          # 离线端到端演示
+│   └── analyze_log.py           # 日志分析工具
+└── tests/                       # 单元测试
+    ├── test_config_manager.py
+    ├── test_http_client.py
+    └── test_rating_algorithms.py
 ```
 
 辅助目录：`docs/`（文档）、`tests/`（pytest）、`data/`（SQLite）、`results/`（输出）、`mock_*`（演示输出）。
@@ -103,7 +118,7 @@ livesecbench/
 1. **初始化**：配置日志，创建 `TaskManager` 并生成 `task_id`。
 2. **加载配置/题库**：`ConfigManager` 校验并解析 `question_selection`，按维度过滤 & 抽样题目。
 3. **模型回答阶段**：`core/run_model_answer.py` 调度 `RetryableHTTPClient` 并发访问模型 API；命中 SQLite 缓存即跳过。
-4. **评分阶段**：`core/run_scoring.py` 针对每个维度启动 orchestrator，执行配对、PK、ELO 更新与可选收敛检测。
+4. **评分阶段**：`core/run_scoring.py` 针对每个维度启动 `ScoringOrchestrator`，执行配对、PK、ELO 更新与可选收敛检测。
 5. **聚合输出**：`rank.py` 生成 `{month}-models.csv`、`{month}-stats.csv`；`report.py` 生成 `summary_report*.md`（提示词已嵌入报告，不再另存 `.txt`）。
 6. **任务落盘**：输出路径、模型列表、维度题量等信息写入 `evaluation_tasks`，便于追溯。
 
@@ -111,8 +126,10 @@ livesecbench/
 - Payload 支持文本 + 图片（base64 / URL）及可选 `reasoning` 字段。
 - `api_call_settings` 控制超时、并发、速率、重试；`RetryableHTTPClient` 自动注入日志上下文。
 - 成功与失败的结果都会写入 `model_outputs`，字段包含 reasoning、token 统计与题目信息。
+- 支持模型错误处理和备用模型切换，提高稳定性。
 
 ### 3.3 评分/裁判流水线
+- 评分编排器：`ScoringOrchestrator` 协调配对策略、评分算法、收敛检测、PK 运行器。
 - 配对策略：瑞士制（默认）、单循环、随机，均位于 `infra/scoring/pairing_strategies.py`。
 - 评分算法：`ELORatingAlgorithm`，K 值、初始分、logistic 常数可配置；未来可扩展为 Glicko 等。
 - 收敛检测：basic/adaptive 两种实现，基于评分变化率与排名稳定度判断是否提前结束。
@@ -145,10 +162,14 @@ livesecbench/
   - `elo_results/{dimension}/`：ELO 历史/最终排名/PK 详情
 - 输出路径、文件模板可通过 `scoring_settings.model_based.elo` 自定义；在 CI 中可定向到 `tmp/` 或挂载目录。
 
-### 4.3 SQLite
-- `model_outputs`：模型回答、reasoning、token 统计及题目元信息；`UNIQUE(model, category, prompt)` 实现缓存。
-- `pk_results`：维度 + 题目 + 模型组合的 PK 缓存，避免重复裁判。
-- `evaluation_tasks`：任务配置、模型列表、维度、输出目录与完成状态。
+### 4.3 存储层
+- **SQLiteStorage**：默认实现，支持 `model_outputs`、`pk_results`、`evaluation_tasks` 表。
+  - `model_outputs`：模型回答、reasoning、token 统计及题目元信息；`UNIQUE(model, category, prompt)` 实现缓存。
+  - `pk_results`：维度 + 题目 + 模型组合的 PK 缓存，避免重复裁判。
+  - `evaluation_tasks`：任务配置、模型列表、维度、输出目录与完成状态。
+- **MySQLStorage**：选择性实现，适用于大规模部署。
+- **BaseStorage**：存储抽象基类，定义统一接口。
+- **StorageFactory**：根据配置自动选择适当的存储实现。
 
 详细字段及示例请参考 `docs/RESULT_FORMAT.md`。
 
@@ -160,10 +181,13 @@ livesecbench/
 |------|------|------|
 | 自定义题库 / 维度 | `question_set/` + 配置中的 `question_selection` | 直接新增 JSON/CSV 并配置维度名称，可混合显性/隐性场景。 |
 | 新评分器 | `scorers/` | 新建 `custom_scorer.py` 并实现 `async score(...)`；配置项 `scorer` 写入文件名即可。 |
-| 配对/评分算法 | `infra/scoring/` | 新增策略或算法类并在配置中切换，`ScoringOrchestrator` 自动加载。 |
+| 配对/评分算法 | `infra/scoring/` | 新增策略或算泖类并在配置中切换，`ScoringOrchestrator` 自动加载。 |
 | 裁判模型切换 | `judge_model_api` | 填写新的 base_url / api_key / model，即可替换为任意 OpenAI-style Chat API。 |
+| 存储后端切换 | `storage/` | 通过 `BaseStorage` 抽象接口，可扩展 MySQL、PostgreSQL 等多种数据库。 |
 | 结果导出 | `core/report.py`、`core/rank.py` | 可扩展 PDF/HTML 或上传外部存储，任务信息会记录自定义路径。 |
 | 调度方式 | `scripts/` 或自定义 CLI | 通过 Bash/Make/CI Pipeline 调度多份配置，也可将核心模块嵌入私有流程。 |
+| 模型错误处理 | `model_error_handlers` | 支持自定义错误处理策略和备用模型切换。 |
+| 图片输入支持 | `image_text_input` | 支持多模态输入，自动过滤不支持图片的模型。 |
 
 ---
 
@@ -173,6 +197,7 @@ livesecbench/
 - **断点续跑**：`SQLiteStorage` 对模型输出与 PK 结果做幂等保存，再次运行同一配置会自动跳过成功记录；如需强制重跑可清理数据库或修改 `eval_run_name`。
 - **速率与重试**：`RetryableHTTPClient` 内置 RateLimiter、指数退避重试与错误日志，可精确定位 API 失败原因。
 - **健康指标**：收敛检测状态、PK 失败率、模型错误分布等信息写入日志，便于在监控系统中采集。
+- **存储容错**：支持 SQLite 与 MySQL 双重存储，提供数据同步工具保证数据安全。
 
 ---
 
@@ -181,8 +206,9 @@ livesecbench/
 | 类型 | 说明 |
 |------|------|
 | 被测模型 / 裁判模型 | 任意兼容 OpenAI Chat Completions 风格的 HTTP API，凭据通过环境变量注入。 |
-| 存储 | 默认仅依赖本地 SQLite；可通过替换 `SQLiteStorage` 或新增导出逻辑接入外部数据库。 |
+| 存储 | 支持 SQLite 和 MySQL 双后端，可通过配置切换；提供数据同步工具保障数据安全。 |
 | 文件系统 | 默认写本地磁盘，可指向挂载盘或对象存储挂载；CI 中常将结果目录设为临时路径。 |
+| Token 计数 | 可选依赖 `transformers` 库进行精确 Token 计数，否则使用粗略估算。 |
 
 ---
 

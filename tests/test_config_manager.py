@@ -21,8 +21,10 @@ def sample_config():
                 'model_name': 'Test Model 1',
                 'organization': 'TestOrg',
                 'is_reasoning': False,
+                'image_text_input': False,
                 'api_config': {
                     'base_url': 'https://api.test.com',
+                    'end_point': '/chat/completions',
                     'api_key': 'env_var:TEST_API_KEY',
                     'model_id': 'provider/model1'
                 }
@@ -31,8 +33,10 @@ def sample_config():
                 'model_name': 'Test Model 2',
                 'organization': 'TestOrg',
                 'is_reasoning': True,
+                'image_text_input': True,
                 'api_config': {
                     'base_url': 'https://api.test.com',
+                    'end_point': '/chat/completions',
                     'api_key': 'env_var:TEST_API_KEY',
                     'model_id': 'provider/model2'
                 }
@@ -119,6 +123,7 @@ def test_get_models_to_test(config_file, env_keys):
     assert 'model_id' not in models[0]
     assert models[0]['api_config']['model_id'] == 'provider/model1'
     assert models[1]['api_config']['model_id'] == 'provider/model2'
+    assert models[1]['image_text_input'] is True
 
 
 def test_get_reasoning_model_ids(config_file, env_keys):

@@ -8,6 +8,7 @@ from __future__ import annotations
 from typing import List
 from pathlib import Path
 import time
+import math
 
 from livesecbench.infra.scoring import (
     SwissPairingStrategy,
@@ -18,6 +19,56 @@ from livesecbench.infra.scoring import (
     ConvergenceDetector,
     AdaptiveConvergenceDetector,
 )
+from livesecbench.infra.config import ConfigManager
+
+
+def _filter_models_by_capability(
+    models: List[str],
+    config_manager: ConfigManager,
+    require_image_input: bool = False,
+    logger=None
+) -> List[str]:
+    """根据模型能力过滤模型列表"""
+    if not require_image_input:
+        return models
+    
+    model_entries = config_manager.get_models_to_test()
+    model_capabilities = {}
+    
+    for entry in model_entries:
+        if not isinstance(entry, dict):
+            continue
+        
+        api_config = entry.get('api_config', {})
+        if not api_config:
+            continue
+        
+        model_id = api_config.get('model_id')
+        if model_id:
+            model_capabilities[model_id] = {
+                'image_text_input': entry.get('image_text_input', False),
+            }
+    
+    filtered_models = []
+    skipped_models = []
+    
+    for model_id in models:
+        capabilities = model_capabilities.get(model_id, {})
+        image_support = capabilities.get('image_text_input', False)
+        
+        if require_image_input and not image_support:
+            skipped_models.append(model_id)
+        else:
+            filtered_models.append(model_id)
+    
+    if skipped_models and logger:
+        logger.debug(
+            f"已跳过 {len(skipped_models)} 个不支持图片输入的模型: "
+            f"{', '.join(skipped_models[:5])}"
+            f"{'...' if len(skipped_models) > 5 else ''}"
+        )
+    
+    return filtered_models
 
 
 async def score(
@@ -42,6 +93,21 @@ async def score(
         logger.warning(f"{evaluation_dimension}: 未找到可用模型，跳过评分")
         return {}
     
+    config_manager = runtime_context.get('config_manager')
+    if config_manager and evaluation_dimension in ('cross_modal', '跨模态安全'):
+        original_count = len(model_pool)
+        model_pool = _filter_models_by_capability(
+            model_pool, 
+            config_manager, 
+            require_image_input=True,
+            logger=logger
+        )
+        if len(model_pool) < original_count:
+            logger.info(
+                f"{evaluation_dimension}: 已过滤不支持图片输入的模型，"
+                f"从 {original_count} 个减少到 {len(model_pool)} 个"
+            )
+    
     question_cnt = len(dimension_questions)
     logger.info(f"{evaluation_dimension}: 模型数={len(model_pool)}, 题目数={question_cnt}")
     
@@ -59,7 +125,7 @@ async def score(
     
     if strategy_name == 'swiss':
         pairing_strategy = SwissPairingStrategy()
-        num_rounds = elo_settings.get('swiss_group_num', 5)
+        num_rounds = elo_settings.get('swiss_group_num', math.ceil(math.log(len(model_pool), 2)))
         logger.info(f"{evaluation_dimension}: 使用瑞士制配对，轮数={num_rounds}")
         
     elif strategy_name == 'round_robin':
@@ -75,7 +141,7 @@ async def score(
     else:
         logger.warning(f"{evaluation_dimension}: 不支持的配对策略 '{strategy_name}'，使用默认瑞士制")
         pairing_strategy = SwissPairingStrategy()
-        num_rounds = elo_settings.get('swiss_group_num', 5)
+        num_rounds = elo_settings.get('swiss_group_num', math.ceil(math.log(len(model_pool), 2)))
     
     rating_config = elo_settings.get('rating', {})
     algorithm_name = rating_config.get('algorithm', 'elo')

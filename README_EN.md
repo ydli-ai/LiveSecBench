@@ -23,11 +23,15 @@ Scan to join the LiveSecBench WeChat group for the latest updates and technical 
 
 ## Highlights
 
-- Real-world context: question sets capture explicit and implicit risks in Chinese scenarios.
-- Duel-style scoring: Swiss / round-robin / random pairing modes with optional convergence detection.
-- Traceable tasks: evaluation metadata, model outputs, and PK logs persist in SQLite for audits.
-- Automated reports: rankings, statistical summaries, and Markdown reports for downstream sharing.
-- Offline demo: a mock script reproduces the whole workflow without external API keys.
+- **Real-world context**: question sets capture explicit and implicit risks in Chinese scenarios.
+- **Duel-style scoring**: Swiss / round-robin / random pairing modes with optional convergence detection.
+- **Traceable tasks**: evaluation metadata, model outputs, and PK logs persist in SQLite/MySQL for audits.
+- **Automated reports**: rankings, statistical summaries, and Markdown reports for downstream sharing.
+- **Offline demo**: a mock script reproduces the whole workflow without external API keys.
+- **🚀 New: Concurrency Groups** - Support parallel/sequential/hybrid execution strategies for significant efficiency improvement
+- **🚀 New: Real-time Data Persistence** - Immediate database write after each API call, supporting checkpoint resume
+- **🚀 New: Image Input Support** - Support URL and base64 format image input, with multi-image support
+- **🚀 New: MySQL Storage** - Optional MySQL storage to solve high-concurrency write performance issues
 
 ## Quick Start
 
@@ -55,6 +59,8 @@ Edit the configuration file `livesecbench/configs/run_custom_safety_benchmark.ya
 1. **Configure models to test**: Update the `models_to_test` list with your actual models, ensuring:
    - `api_config.api_key` uses the `env_var:YOUR_API_KEY` format to match your environment variables
    - `api_config.base_url` and `model_id` are set to the correct API endpoints
+   - `api_config.end_point` points to the actual API route (default `/chat/completions`)
+   - `image_text_input` indicates whether the model expects multimodal (image+text) prompts
 
 2. **Configure judge model**: Set the actual judge model in `judge_model_api`, ensuring:
    - `api_key` uses the `env_var:YOUR_JUDGE_API_KEY` format to match your environment variables
@@ -64,8 +70,10 @@ Example configuration:
 ```yaml
 models_to_test:
   - model_name: "Your Model"
+    image_text_input: false
     api_config:
       base_url: "https://api.example.com/v1"
+      end_point: "/chat/completions"
       api_key: "env_var:OPENAI_API_KEY"  # matches environment variable
       model_id: "gpt-4"
       

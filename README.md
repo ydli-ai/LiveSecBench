@@ -21,11 +21,15 @@ LiveSecBench 是一个面向中文场景的大模型安全评测基准。框架�
 
 ## 项目亮点
 
-- 真实语境：题库覆盖多种中文安全场景，区分显性与隐性风险表达。
-- 对战式评分：ELO 流程支持瑞士制 / 循环 / 随机配对，可选收敛检测提前停止。
-- 任务溯源：评测任务、模型输出与 PK 结果统一落盘到 SQLite，便于复现与审计。
-- 自动报告：生成排行榜、统计摘要与 Markdown 报告。
-- 离线演示：Mock 脚本可在无 API Key 环境模拟完整流程，快速验证配置。
+- **真实语境**：题库覆盖多种中文安全场景，区分显性与隐性风险表达。
+- **对战式评分**：ELO 流程支持瑞士制 / 循环 / 随机配对，可选收敛检测提前停止。
+- **任务溯源**：评测任务、模型输出与 PK 结果统一落盘到 SQLite/MySQL，便于复现与审计。
+- **自动报告**：生成排行榜、统计摘要与 Markdown 报告。
+- **离线演示**：Mock 脚本可在无 API Key 环境模拟完整流程，快速验证配置。
+- **🚀 新特性：并发分组执行** - 支持并行/串行混合策略，大幅提升评测效率
+- **🚀 新特性：实时数据保存** - 每完成一次请求立即写入数据库，支持断点续传
+- **🚀 新特性：图片输入支持** - 支持 URL 和 base64 格式图片输入，支持多图片
+- **🚀 新特性：MySQL 存储** - 可选 MySQL 存储，解决高并发写入性能问题
 
 ## 快速开始
 
@@ -53,6 +57,8 @@ export DEEPSEEK_API_KEY="your_deepseek_key"
 1. **配置待评测模型**：在 `models_to_test` 中修改模型列表为实际模型，确保：
    - `api_config.api_key` 使用 `env_var:YOUR_API_KEY` 格式与环境变量匹配
    - `api_config.base_url` 和 `model_id` 设置为正确的 API 端点
+   - `api_config.end_point` 指定具体请求路由（默认 `/chat/completions`）
+   - `image_text_input` 为 `true` 时表示该模型支持图文混合输入
 
 2. **配置判别模型**：在 `judge_model_api` 中设置实际判别模型，确保：
    - `api_key` 使用 `env_var:YOUR_JUDGE_API_KEY` 格式与环境变量匹配
@@ -62,8 +68,10 @@ export DEEPSEEK_API_KEY="your_deepseek_key"
 ```yaml
 models_to_test:
   - model_name: "Your Model"
+    image_text_input: false
     api_config:
       base_url: "https://api.example.com/v1"
+      end_point: "/chat/completions"
       api_key: "env_var:OPENAI_API_KEY"  # 对应环境变量
       model_id: "gpt-4"
       
@@ -98,6 +106,9 @@ python scripts/run_mock_e2e.py
 - `question_selection` 可混合多个维度、版本或样本数量限制。
 - `scoring_settings.model_based.elo` 控制配对策略、收敛检测、输出目录等参数。
 - `judge_model_api` 指定裁判模型，默认 `deepseek-chat`。
+- `api_call_settings.concurrency_groups` 支持并发分组配置，可按照并行/串行混合策略。
+- `storage` 支持 SQLite 或 MySQL 切换，推荐在高并发场景使用 MySQL。
+- `api_call_settings` 支持 RPM/TPM/并发限制配置，精细化控制 API 调用速率。
 - 详尽说明与最佳实践请参见 `docs/USER_GUIDE.md`。
 
 ## 结果产出

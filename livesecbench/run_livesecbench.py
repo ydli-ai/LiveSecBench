@@ -16,8 +16,8 @@ configure_root_logger(level='INFO', log_to_file=True, log_to_console=True)
 logger = get_logger(__name__)
 
 
-def load_questions(base_path, selection_config):
-    """根据配置从题库加载问题，支持 adversarial_level 和 limit 筛选"""
+def load_questions(base_path, selection_config, global_random_seed=None):
+    """根据配置从题库加载问题，支持 adversarial_level、sub_dimension 和 limit 筛选"""
     all_questions = []
     dimension_questions = {}
     
@@ -25,6 +25,8 @@ def load_questions(base_path, selection_config):
         dimension = selection['dimension']
         adversarial_levels = selection.get('adversarial_level', None)
         limit = selection.get('limit', 0)
+        sub_dimension_limits = selection.get('sub_dimension_limits', {})
+        random_seed = selection.get('random_seed', global_random_seed)
         
         dimension_questions[dimension] = []
         loaded_questions = []
@@ -50,7 +52,37 @@ def load_questions(base_path, selection_config):
                     filtered_questions.append(q)
             loaded_questions = filtered_questions
         
-        if 0 < limit < len(loaded_questions):
+        # 按 sub_dimension 分组并限制数量
+        if sub_dimension_limits:
+            sub_dimension_groups = {}
+            for q in loaded_questions:
+                sub_dim = q.get('sub_dimension', 'default')
+                if sub_dim not in sub_dimension_groups:
+                    sub_dimension_groups[sub_dim] = []
+                sub_dimension_groups[sub_dim].append(q)
+            
+            if random_seed is not None:
+                random.seed(random_seed)
+                logger.info(f"使用随机种子: {random_seed}")
+            
+            selected_questions = []
+            for sub_dim, count in sub_dimension_limits.items():
+                if sub_dim in sub_dimension_groups:
+                    questions_in_sub = sub_dimension_groups[sub_dim]
+                    if 0 < count < len(questions_in_sub):
+                        sampled = random.sample(questions_in_sub, count)
+                        selected_questions.extend(sampled)
+                        logger.info(f"  {sub_dim}: 从 {len(questions_in_sub)} 题中抽取 {count} 题")
+                    else:
+                        selected_questions.extend(questions_in_sub)
+                        logger.info(f"  {sub_dim}: 使用全部 {len(questions_in_sub)} 题")
+                else:
+                    logger.warning(f"  {sub_dim}: 未找到题目")
+            
+            loaded_questions = selected_questions
+        elif 0 < limit < len(loaded_questions):
+            if random_seed is not None:
+                random.seed(random_seed)
             loaded_questions = random.sample(loaded_questions, limit)
         
         dimension_questions[dimension] = loaded_questions
@@ -79,6 +111,11 @@ def load_models_from_config_manager(config_manager: ConfigManager) -> list:
     for entry in model_entries:
         if not isinstance(entry, dict):
             continue
+        
+        enabled = entry.get('enabled', True)
+        if not enabled:
+            continue
+        
         api_config = entry.get('api_config', {})
         if not api_config:
             continue
@@ -90,7 +127,10 @@ def load_models_from_config_manager(config_manager: ConfigManager) -> list:
             'model_name': entry.get('model_name'),
             'model': model_id,
             'is_reasoning': entry.get('is_reasoning', False),
+            'image_text_input': entry.get('image_text_input', False),
+            'use_structured_content': entry.get('use_structured_content', False),
             'provider': provider,
+            'organization': entry.get('organization', ''),
             'api_config': api_config,
         }
         if model_item['model']:
@@ -104,10 +144,14 @@ def main():
     
     parser = argparse.ArgumentParser(description="LiveSecBench评估框架主程序")
     parser.add_argument('--config', type=str, required=True, help='评测任务的YAML配置文件路径')
+    parser.add_argument('--random-seed', type=int, help='全局随机种子')
     args = parser.parse_args()
     config_path = args.config
+    global_random_seed = args.random_seed
     
     logger.info(f"LiveSecBench 评测框架启动 - 配置文件: {config_path}")
+    if global_random_seed is not None:
+        logger.info(f"全局随机种子: {global_random_seed}")
     
     from livesecbench.core.task_manager import TaskManager
     task_manager = TaskManager()
@@ -131,7 +175,7 @@ def main():
     question_selection = config_manager.get_question_selection()
     dimensions = config_manager.get_dimensions()
     question_set_path = Path(__file__).resolve().parent / 'question_set'
-    questions, dimension_questions = load_questions(str(question_set_path), question_selection)
+    questions, dimension_questions = load_questions(str(question_set_path), question_selection, global_random_seed=global_random_seed)
     
     model_list = load_models_from_config_manager(config_manager)
     if model_list:
@@ -151,14 +195,8 @@ def main():
     logger.info("生成排名")
     rank(config_manager, dimensions, task_manager=task_manager)
     
-    storage_tables = config_manager.get_storage_tables()
-    from livesecbench.storage.sqlite_storage import SQLiteStorage
-    storage = SQLiteStorage(
-        db_path=config_manager.get_storage_db_path(),
-        model_outputs_table=storage_tables['model_outputs_table'],
-        pk_results_table=storage_tables['pk_results_table'],
-        task_id=task_manager.task_id,
-    )
+    from livesecbench.storage import create_storage
+    storage = create_storage(config_manager, task_id=task_manager.task_id)
     storage.save_task_info(task_manager.task_id, task_manager.get_task_info())
     
     logger.info("生成测试报告")
@@ -169,4 +207,12 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except KeyboardInterrupt:
+        logger.warning("程序被用户中断")
+    except Exception as e:
+        logger.error(f"程序执行过程中发生未捕获的异常: {e}")
+        import traceback
+        logger.error(f"异常堆栈信息:\n{traceback.format_exc()}")
+        raise

@@ -28,6 +28,7 @@ async def generate_report_with_llm(
     timeout = judge_api_config.get('timeout', 300)
     max_retries = judge_api_config.get('max_retries', 5)
     retry_delay = judge_api_config.get('retry_delay', 1)
+    endpoint = judge_api_config.get('end_point', 'chat/completions')
     
     if not api_key:
         raise ValueError("未找到有效的API密钥配置")
@@ -51,10 +52,16 @@ async def generate_report_with_llm(
     }
     
     try:
+        identifier = {
+            'task': '报告生成',
+            'prompt_preview': prompt[:80] if len(prompt) > 80 else prompt,
+        }
         output = await http_client.post(
-            endpoint="chat/completions",
+            endpoint=endpoint,
             json_data=req_data,
-            context_name="报告生成"
+            context_name="报告生成",
+            task_type="general",
+            identifier=identifier
         )
         
         if 'choices' not in output or len(output['choices']) == 0:

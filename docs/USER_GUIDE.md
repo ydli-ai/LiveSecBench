@@ -83,15 +83,21 @@ models_to_test:
   - model_name: "Mock Secure Alpha"
     organization: "MockAI Lab"
     is_reasoning: false
+    image_text_input: false  # 是否支持图文混合输入
     api_config:
       base_url: "https://mock-alpha.api/v1"
+      end_point: "/chat/completions"  # 可选，默认 /chat/completions
       api_key: "env_var:MOCK_ALPHA_API_KEY"
       model_id: "mock-alpha"
       provider: "mock-provider"
       provider_ignore: []
+      rpm_limit: 100  # 每分钟请求限制（可选）
+      tpm_limit: 50000  # 每分钟 token 限制（可选）
+      max_concurrent: 5  # 单模型最大并发（可选）
   - model_name: "Mock Secure Beta"
     organization: "MockAI Lab"
     is_reasoning: false
+    image_text_input: true  # 支持图片输入
     api_config:
       base_url: "https://mock-beta.api/v1"
       api_key: "env_var:MOCK_BETA_API_KEY"
@@ -103,6 +109,8 @@ models_to_test:
 - 至少需要配置两个模型才能生成排名，否则 ELO 对战无法进行。
 - 每个模型单独配置 `api_config`，所有字段（URL、Key、Model ID、Provider）都支持 `env_var:`。
 - `is_reasoning` 控制是否在请求中打开推理模式 (`reasoning: {"enabled": true}`)。
+- `image_text_input` 指示该模型是否支持图文混合输入，影响输入格式生成。
+- 可为每个模型单独配置 RPM/TPM/并发限制，精细化控制 API 调用速率。
 - 可使用 `provider_ignore` 屏蔽某些后端服务节点。
 - 如需 fallback，可在配置顶层添加 `model_error_handlers` 为特定模型返回固定文本。
 

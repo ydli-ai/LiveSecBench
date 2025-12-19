@@ -67,7 +67,7 @@ class ScoringOrchestrator:
         
         all_pair_results = []
         history_snapshots = []
-        question_groups = self._split_questions(questions, num_rounds)
+        question_groups = self._split_questions(questions, num_rounds, evaluation_dimension)
         converged_early = False
         for round_idx, question_set in enumerate(question_groups):
             if not question_set:
@@ -138,6 +138,7 @@ class ScoringOrchestrator:
     ) -> List[dict]:
         """执行一轮PK对战"""
         pk_tasks = []
+        skipped_count = 0
         for model_a, model_b in pairs:
             for question_data in questions:
                 category = question_data.get('category') or question_data.get('dimension')
@@ -147,10 +148,27 @@ class ScoringOrchestrator:
                     self.logger.warning(f"题目缺少prompt/question/question_text字段，跳过: {question_data.keys()}")
                     continue
                 
-                result_a = self.fetch_model_result(model_a, category, prompt) or {}
-                result_b = self.fetch_model_result(model_b, category, prompt) or {}
+                image_info = None
+                if evaluation_dimension in ('cross_modal', '跨模态安全'):
+                    question_images = question_data.get('question_image', [])
+                    if question_images and isinstance(question_images, list):
+                        image_info = question_images
                 
-                pk_tasks.append({
+                result_a = self.fetch_model_result(model_a, category, prompt, image_info) or {}
+                result_b = self.fetch_model_result(model_b, category, prompt, image_info) or {}
+                
+                answer_a = result_a.get('answer')
+                answer_b = result_b.get('answer')
+                
+                if not answer_a or not answer_b:
+                    skipped_count += 1
+                    self.logger.debug(
+                        f"跳过对战（缺少回答）: {model_a}{'(无答案)' if not answer_a else ''} vs "
+                        f"{model_b}{'(无答案)' if not answer_b else ''} | 题目: {prompt[:50]}..."
+                    )
+                    continue
+                
+                task = {
                     'evaluation_dimension': evaluation_dimension,
                     'category': category,
                     'prompt': prompt,
@@ -158,10 +176,24 @@ class ScoringOrchestrator:
                     'model_b': model_b,
                     'reasoning_a': result_a.get('reasoning'),
                     'reasoning_b': result_b.get('reasoning'),
-                    'answer_a': result_a.get('answer'),
-                    'answer_b': result_b.get('answer'),
-                    'true_answer': result_a.get('true_answer') if category == '事实性' else None,
-                })
+                    'answer_a': answer_a,
+                    'answer_b': answer_b,
+                    'true_answer': result_a.get('true_answer') if result_a.get('true_answer', '') else None,
+                }
+                
+                if evaluation_dimension in ('cross_modal', '跨模态安全'):
+                    task['sub_dimension'] = question_data.get('sub_dimension')
+                    
+                    question_images = question_data.get('question_image', [])
+                    if question_images and isinstance(question_images, list) and len(question_images) > 0:
+                        first_image = question_images[0]
+                        task['image_md5'] = first_image.get('md5')
+                        task['ground_truth_image_desc'] = first_image.get('ground_truth_image_desc')
+                
+                pk_tasks.append(task)
+        
+        if skipped_count > 0:
+            self.logger.info(f"本轮因缺少回答跳过了 {skipped_count} 个对战")
         
         pk_results = await self._execute_pks(pk_tasks, max_workers)
         updated_count = 0
@@ -221,18 +253,30 @@ class ScoringOrchestrator:
             """执行单个PK任务"""
             async with semaphore:
                 try:
-                    winner, is_new, consume_time, content, pk_result = await self.pk_runner(
-                        evaluation_dimension=task['evaluation_dimension'],
-                        category=task['category'],
-                        question=task['prompt'],
-                        model_A=task['model_a'],
-                        model_B=task['model_b'],
-                        reasoning_A=task['reasoning_a'],
-                        reasoning_B=task['reasoning_b'],
-                        answer_A=task['answer_a'],
-                        answer_B=task['answer_b'],
-                        true_answer=task['true_answer'],
-                    )
+                    # 构建pk_runner的参数
+                    pk_params = {
+                        'evaluation_dimension': task['evaluation_dimension'],
+                        'category': task['category'],
+                        'question': task['prompt'],
+                        'model_A': task['model_a'],
+                        'model_B': task['model_b'],
+                        'reasoning_A': task['reasoning_a'],
+                        'reasoning_B': task['reasoning_b'],
+                        'answer_A': task['answer_a'],
+                        'answer_B': task['answer_b'],
+                        'true_answer': task['true_answer'],
+                    }
+                    
+                    # 对于跨模态评测，添加额外参数
+                    if 'sub_dimension' in task:
+                        pk_params['sub_dimension'] = task['sub_dimension']
+                    if 'image_md5' in task:
+                        pk_params['image_md5'] = task['image_md5']
+                    if 'ground_truth_image_desc' in task:
+                        pk_params['ground_truth_image_desc'] = task['ground_truth_image_desc']
+                    
+                    winner, is_new, consume_time, content, pk_result = await self.pk_runner(**pk_params)
+                    
                     if pk_result and isinstance(pk_result, dict):
                         return pk_result
                     elif winner:
@@ -265,12 +309,16 @@ class ScoringOrchestrator:
     def _split_questions(
         self, 
         questions: List[dict], 
-        num_groups: int
+        num_groups: int,
+        evaluation_dimension: str
     ) -> List[List[dict]]:
         """将题目分组"""
         questions_list = list(questions)
+        seed = hash(tuple(sorted(q.get('question_id', '') for q in questions_list))) % (2**32)
+        self.logger.info(f"{evaluation_dimension} 题目分组时的随机种子: {seed}")
+        random.seed(seed)
         random.shuffle(questions_list)
-        
+        random.seed()
         if num_groups <= 0:
             return [questions_list]
         

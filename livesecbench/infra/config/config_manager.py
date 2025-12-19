@@ -58,6 +58,9 @@ class ConfigManager:
         """遍历模型配置，生成 {api_model_id -> model_name} 映射"""
         name_map: Dict[str, str] = {}
         for model in self._config.get('models_to_test', []) or []:
+            enabled = model.get('enabled', True)
+            if not enabled:
+                continue
             api_config = model.get('api_config', {}) or {}
             model_id = api_config.get('model_id')
             if not model_id:
@@ -94,6 +97,9 @@ class ConfigManager:
         """获取所有模型ID列表"""
         model_ids = []
         for model_config in self.get_models_to_test():
+            enabled = model_config.get('enabled', True)
+            if not enabled:
+                continue
             api_config = model_config.get('api_config', {})
             model_id = api_config.get('model_id')
             if model_id:
@@ -104,6 +110,9 @@ class ConfigManager:
         """获取推理模型ID列表"""
         reasoning_models = []
         for model_config in self.get_models_to_test():
+            enabled = model_config.get('enabled', True)
+            if not enabled:
+                continue
             if model_config.get('is_reasoning', False):
                 api_config = model_config.get('api_config', {})
                 model_id = api_config.get('model_id')
@@ -186,17 +195,52 @@ class ConfigManager:
         """获取存储配置"""
         return self._config.get('storage', {})
     
+    def get_storage_type(self) -> str:
+        """
+        获取存储类型
+        """
+        storage_config = self.get_storage_config()
+        return storage_config.get('type', 'sqlite').lower()
+    
     def get_storage_db_path(self) -> str:
         """获取SQLite数据库路径"""
         sqlite_config = self.get_storage_config().get('sqlite', {})
         return sqlite_config.get('db_path', 'data/livesecbench.db')
     
+    def get_mysql_config(self) -> Dict:
+        """
+        获取MySQL配置
+        """
+        mysql_config = self.get_storage_config().get('mysql', {})
+        
+        resolved_config = dict(mysql_config)
+        if 'password' in resolved_config:
+            resolved_config['password'] = self._resolve_env_var(resolved_config['password'])
+        if 'user' in resolved_config:
+            resolved_config['user'] = self._resolve_env_var(resolved_config['user'])
+        
+        return resolved_config
+    
     def get_storage_tables(self) -> Dict[str, str]:
-        """获取存储表名配置"""
-        sqlite_config = self.get_storage_config().get('sqlite', {})
+        """
+        获取存储表名配置（通用，支持 SQLite 和 MySQL）
+        """
+        storage_config = self.get_storage_config()
+        
+        tables_config = storage_config.get('tables', {})
+        if tables_config:
+            return {
+                'model_outputs_table': tables_config.get('model_outputs', 'model_outputs'),
+                'pk_results_table': tables_config.get('pk_results', 'pk_results'),
+                'tasks_table': tables_config.get('tasks', 'evaluation_tasks'),
+            }
+        
+        # 兼容旧的 sqlite 配置
+        sqlite_config = storage_config.get('sqlite', {})
         return {
             'model_outputs_table': sqlite_config.get('model_outputs_table', 'model_outputs'),
             'pk_results_table': sqlite_config.get('pk_results_table', 'pk_results'),
+            'tasks_table': sqlite_config.get('tasks_table', 'evaluation_tasks'),
         }
     
     def get_api_call_settings(self) -> Dict:
