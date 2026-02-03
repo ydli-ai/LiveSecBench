@@ -30,6 +30,7 @@ LiveSecBench 是一个面向中文场景的大模型安全评测基准。框架�
 - **🚀 新特性：实时数据保存** - 每完成一次请求立即写入数据库，支持断点续传
 - **🚀 新特性：图片输入支持** - 支持 URL 和 base64 格式图片输入，支持多图片
 - **🚀 新特性：MySQL 存储** - 可选 MySQL 存储，解决高并发写入性能问题
+- **🚀 新特性：文生图评测** - 支持 文生图 API
 
 ## 快速开始
 
@@ -109,6 +110,7 @@ python scripts/run_mock_e2e.py
 - `api_call_settings.concurrency_groups` 支持并发分组配置，可按照并行/串行混合策略。
 - `storage` 支持 SQLite 或 MySQL 切换，推荐在高并发场景使用 MySQL。
 - `api_call_settings` 支持 RPM/TPM/并发限制配置，精细化控制 API 调用速率。
+- **文生图**：在 `models_to_test` 中为文生图模型设置 `task_type: text_to_image` 和 `api_config.api_provider`（`siliconflow` / `sd_webui` / `comfyui`），在 `question_selection` 中增加 `dimension: text_to_image` 与题集 `text_to_image`；生成图落盘到 `artifacts/{task_id}/{model_id}/{question_id}/`，并通过 `image_postprocess.captioner` 转成文字描述供裁判评分。
 - 详尽说明与最佳实践请参见 `docs/USER_GUIDE.md`。
 
 ## 结果产出

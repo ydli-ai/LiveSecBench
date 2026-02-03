@@ -201,7 +201,7 @@ class RetryableHTTPClient:
     ) -> Dict[str, Any]:
         """发送POST请求（带重试机制）"""
         client = await self._get_client()
-        url = endpoint.lstrip('/')
+        url = endpoint.lstrip("/")
         
         identifier_str = ""
         if identifier:
@@ -446,4 +446,20 @@ class RetryableHTTPClient:
                     raise
         
         raise RuntimeError(f"{context_name}失败{identifier_str}，已重试 {self.max_retries} 次仍未成功")
+
+    async def get(
+        self,
+        endpoint: str,
+        params: Optional[Dict[str, str]] = None,
+        headers: Optional[Dict[str, str]] = None,
+    ) -> tuple[str, bytes]:
+        """发送 GET 请求，返回 (response_text, response_content)。用于 ComfyUI history/view 等。"""
+        client = await self._get_client()
+        url = endpoint.lstrip("/")
+        default_headers = {"Authorization": f"Bearer {self.api_key}"}
+        if headers:
+            default_headers.update(headers)
+        response = await client.get(url=url, params=params or None, headers=default_headers)
+        response.raise_for_status()
+        return (response.text, response.content)
 

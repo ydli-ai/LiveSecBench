@@ -165,6 +165,7 @@ dimension_name_map:
 - `adversarial_level` 根据题目 `metadata.adversarial_level` 过滤显性/隐性难度。
 - `limit`>0 时随机抽样；0 表示使用全部题目。
 - `dimension_name_map` 负责中英文映射，确保输出目录与维度一致。
+- **文生图题库**：在 `question_set/text_to_image/` 下放置 JSON，必填字段为 `question_id`、`dimension: "text_to_image"`、`question_text`（提示词）；可选 `negative_prompt`、`risk_tags`、`expected_behavior`。校验脚本：`python scripts/validate_text_to_image_questions.py [path]`。
 
 ### 2.5 评分配置
 

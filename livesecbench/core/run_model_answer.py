@@ -13,6 +13,8 @@ from livesecbench.infra.http_client import RetryableHTTPClient, RateLimiter
 from livesecbench.storage.sqlite_storage import SQLiteStorage
 from livesecbench.utils.env_loader import load_project_env
 from livesecbench.utils.logger import get_logger
+from livesecbench.core.run_text_to_image import run_single_text_to_image_call
+from livesecbench.core.image_caption import caption_images
 
 load_project_env()
 logger = get_logger(__name__)
@@ -239,6 +241,82 @@ async def single_question_call(
         }
 
 
+async def single_text_to_image_question_call(
+    http_client: RetryableHTTPClient,
+    semaphore: asyncio.Semaphore,
+    model_item: Dict[str, Any],
+    input_data: dict,
+    storage: SQLiteStorage,
+    artifacts_base: Path,
+    captioner_config: Dict[str, Any],
+    task_id: Optional[str] = None,
+) -> Dict[str, Any]:
+    """文生图单题：生成 -> 落盘 -> 描述 -> 返回与 single_question_call 兼容的 payload。"""
+    prompt = (input_data.get('question_text') or input_data.get('prompt', '')).strip()
+    category = input_data.get('dimension', 'text_to_image')
+    question_id = input_data.get('question_id', '')
+    model_name = model_item.get('model_name', '')
+    model_id = model_item.get('model', '')
+    image_info_for_hash = [{"file_path": question_id}] if question_id else None
+    existing = await storage.aget_model_output(model_id, category, prompt, image_info_for_hash)
+    if existing and existing.get('status') == 'success':
+        return existing
+
+    api_config = model_item.get('api_config', {})
+    image_generation = model_item.get('image_generation', {}) or {}
+    payload = await run_single_text_to_image_call(
+        http_client=http_client,
+        semaphore=semaphore,
+        model_name=model_name,
+        model_id=model_id,
+        input_data=input_data,
+        api_config=api_config,
+        image_generation=image_generation,
+        artifacts_base=artifacts_base,
+        task_id=task_id,
+        identifier={"question_id": question_id, "dimension": category},
+    )
+    if payload.get('status') != 'success' or not payload.get('image_outputs'):
+        payload['question_image'] = image_info_for_hash
+        payload['created_at'] = int(time.time())
+        payload['current_time'] = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        return payload
+
+    risk_tags = payload.get('risk_tags', '') or input_data.get('risk_tags', [])
+    if isinstance(risk_tags, list):
+        risk_tags = ', '.join(str(t) for t in risk_tags)
+    captioner = (captioner_config.get('captioner') or {}) if captioner_config else {}
+    if captioner.get('enabled', True) and captioner.get('model'):
+        answer, caption_details = await caption_images(
+            payload['image_outputs'],
+            captioner,
+            risk_tags=risk_tags,
+            prompt_template=captioner.get('prompt_template'),
+        )
+        payload['answer'] = answer
+        payload['caption_details'] = caption_details
+        payload['caption_model'] = captioner.get('model', '')
+    else:
+        payload['answer'] = '(未配置描述模型，跳过)'
+        payload['caption_details'] = []
+        payload['caption_model'] = ''
+
+    payload['question_image'] = image_info_for_hash
+    payload['created_at'] = int(time.time())
+    payload['current_time'] = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    payload['reasoning'] = None
+    payload['server_model'] = None
+    payload['prompt_tokens'] = None
+    payload['completion_tokens'] = None
+    metadata = input_data.get('metadata', {})
+    reference_answer = input_data.get('reference_answer', [])
+    payload.setdefault('prompt_type', metadata.get('type', ''))
+    payload.setdefault('prompt_difficulty', metadata.get('difficulty', ''))
+    payload.setdefault('prompt_category', metadata.get('category', ''))
+    payload.setdefault('true_answer', reference_answer[0] if reference_answer else '')
+    return payload
+
+
 async def batch_test_model(
         model_item: Dict,
         questions: List[dict],
@@ -252,8 +330,10 @@ async def batch_test_model(
         global_rate_limit_per_minute: int = 0,
         global_tpm: int = 0,
         model_error_handlers: Optional[Dict] = None,
+        config_manager: Optional[ConfigManager] = None,
+        task_id: Optional[str] = None,
 ) -> None:
-    """批量测试模型"""
+    """批量测试模型；当 task_type 为 text_to_image 时走文生图+描述流程。"""
     api_config = model_item.get('api_config', {})
     if not api_config:
         logger.error(f"模型 {model_item.get('model_name')} 缺少 api_config 配置")
@@ -272,13 +352,14 @@ async def batch_test_model(
     if not base_url:
         logger.error(f"模型 {model_item.get('model_name')} 的 api_config 缺少 base_url")
         return
-    if not api_key:
+    provider = api_config.get('api_provider', '')
+    if not api_key and provider not in ('sd_webui', 'comfyui'):
         logger.error(f"模型 {model_item.get('model_name')} 的 api_config 缺少 api_key")
         return
     if not model_id:
         logger.error(f"模型 {model_item.get('model_name')} 的 api_config 缺少 model_id")
         return
-    
+    api_key = api_key or ""
     model_item['model'] = model_id
 
     rate_limiter = None
@@ -319,16 +400,17 @@ async def batch_test_model(
 
     try:
         enable_image_text = model_item.get('image_text_input', False)
-        
+        is_text_to_image = model_item.get('task_type') == 'text_to_image'
         for item in questions:
             prompt_text = item.get('question_text')
             category = item.get('dimension')
-            
-            image_info = item.get('question_image') if enable_image_text else None
-            
+            if is_text_to_image:
+                image_info = [{"file_path": item.get('question_id', '')}] if item.get('question_id') else None
+            else:
+                image_info = item.get('question_image') if enable_image_text else None
             existing = await storage.aget_model_output(
-                model_item['model'], 
-                category, 
+                model_item['model'],
+                category,
                 prompt_text,
                 image_info
             )
@@ -349,12 +431,26 @@ async def batch_test_model(
         is_reasoning_model = model_item.get('is_reasoning', False)
         enable_image_text = model_item.get('image_text_input', False)
         use_structured_content = model_item.get('use_structured_content', False)
-        
+        captioner_config = (config_manager.get_image_postprocess_config() if config_manager else {}) or {}
+        artifacts_base = Path(__file__).resolve().parent.parent / "artifacts"
         tasks = []
         completed_count = 0
         image_source_priority = model_item.get('image_source_priority', 'url')
         
         for idx, item in enumerate(pending_questions, 1):
+            if is_text_to_image:
+                coro = single_text_to_image_question_call(
+                    http_client=http_client,
+                    semaphore=semaphore,
+                    model_item=model_item,
+                    input_data=item,
+                    storage=storage,
+                    artifacts_base=artifacts_base,
+                    captioner_config=captioner_config,
+                    task_id=task_id,
+                )
+                tasks.append(asyncio.create_task(coro))
+                continue
             image_paths = None
             if enable_image_text:
                 if 'question_image' in item and isinstance(item['question_image'], list):
@@ -456,6 +552,8 @@ async def execute_models_by_groups(
     rate_limit_per_minute: int,
     tpm: int,
     model_error_handlers: Optional[Dict] = None,
+    config_manager: Optional[ConfigManager] = None,
+    task_id: Optional[str] = None,
 ) -> None:
     """
     根据并发分组配置执行模型推理
@@ -506,6 +604,8 @@ async def execute_models_by_groups(
                     global_rate_limit_per_minute=rate_limit_per_minute,
                     global_tpm=tpm,
                     model_error_handlers=model_error_handlers,
+                    config_manager=config_manager,
+                    task_id=task_id,
                 )
                 tasks.append(task)
             await asyncio.gather(*tasks)
@@ -528,6 +628,8 @@ async def execute_models_by_groups(
                     global_rate_limit_per_minute=rate_limit_per_minute,
                     global_tpm=tpm,
                     model_error_handlers=model_error_handlers,
+                    config_manager=config_manager,
+                    task_id=task_id,
                 )
             logger.info(f"并发分组 [{group_name}] 串行执行完成")
 
@@ -571,13 +673,12 @@ async def batch_gen_llm_answer(
     logger.info(f"问题按维度分组: {', '.join([f'{dim}({len(qs)}题)' for dim, qs in questions_by_dimension.items()])}")
     
     has_cross_modal = 'cross_modal' in questions_by_dimension
+    has_text_to_image = 'text_to_image' in questions_by_dimension
     if has_cross_modal:
         cross_modal_questions = questions_by_dimension['cross_modal']
         other_questions = [q for dim, qs in questions_by_dimension.items() if dim != 'cross_modal' for q in qs]
-        
         image_text_models = [m for m in target_model_list if m.get('image_text_input', False)]
         other_models = [m for m in target_model_list if not m.get('image_text_input', False)]
-        
         logger.info(f"cross_modal 维度共 {len(cross_modal_questions)} 题，将使用 {len(image_text_models)} 个支持图文输入的模型")
         if other_questions:
             logger.info(f"其他维度共 {len(other_questions)} 题，将使用全部 {len(target_model_list)} 个模型")
@@ -586,6 +687,19 @@ async def batch_gen_llm_answer(
         other_questions = all_questions
         image_text_models = []
         other_models = []
+    if has_text_to_image:
+        text_to_image_questions = questions_by_dimension['text_to_image']
+        text_to_image_models = [m for m in target_model_list if m.get('task_type') == 'text_to_image']
+        if has_cross_modal:
+            other_questions = [q for dim, qs in questions_by_dimension.items() if dim not in ('cross_modal', 'text_to_image') for q in qs]
+        else:
+            other_questions = [q for dim, qs in questions_by_dimension.items() if dim != 'text_to_image' for q in qs]
+        logger.info(f"text_to_image 维度共 {len(text_to_image_questions)} 题，将使用 {len(text_to_image_models)} 个文生图模型")
+    else:
+        text_to_image_questions = []
+        text_to_image_models = []
+        if has_cross_modal:
+            other_questions = [q for dim, qs in questions_by_dimension.items() if dim != 'cross_modal' for q in qs]
     
     if not concurrency_groups:
         logger.info("未配置并发分组，将串行执行所有模型")
@@ -612,6 +726,33 @@ async def batch_gen_llm_answer(
                     global_rate_limit_per_minute=rate_limit_per_minute,
                     global_tpm=tpm,
                     model_error_handlers=model_error_handlers,
+                    config_manager=config_manager,
+                    task_id=task_id,
+                )
+        
+        if has_text_to_image and text_to_image_models and text_to_image_questions:
+            logger.info("=" * 60)
+            logger.info(f"开始处理 text_to_image 维度，使用 {len(text_to_image_models)} 个文生图模型")
+            logger.info("=" * 60)
+            for model_item in text_to_image_models:
+                if 'api_config' not in model_item:
+                    logger.warning(f"模型 {model_item.get('model_name', 'unknown')} 缺少 api_config 配置，跳过")
+                    continue
+                await batch_test_model(
+                    model_item,
+                    text_to_image_questions,
+                    storage=storage,
+                    timeout=timeout,
+                    max_concurrent=max_concurrent,
+                    reasoning_enabled=reasoning_enabled,
+                    max_retries=max_retries,
+                    retry_delay=retry_delay,
+                    global_rate_limit_per_second=rate_limit_per_second,
+                    global_rate_limit_per_minute=rate_limit_per_minute,
+                    global_tpm=tpm,
+                    model_error_handlers=model_error_handlers,
+                    config_manager=config_manager,
+                    task_id=task_id,
                 )
         
         if other_questions:
@@ -636,6 +777,8 @@ async def batch_gen_llm_answer(
                     global_rate_limit_per_minute=rate_limit_per_minute,
                     global_tpm=tpm,
                     model_error_handlers=model_error_handlers,
+                    config_manager=config_manager,
+                    task_id=task_id,
                 )
     else:
         logger.info(f"使用并发分组配置，共 {len(concurrency_groups)} 个分组")
@@ -658,6 +801,30 @@ async def batch_gen_llm_answer(
                 rate_limit_per_minute=rate_limit_per_minute,
                 tpm=tpm,
                 model_error_handlers=model_error_handlers,
+                config_manager=config_manager,
+                task_id=task_id,
+            )
+        
+        if has_text_to_image and text_to_image_models and text_to_image_questions:
+            logger.info("=" * 60)
+            logger.info(f"开始处理 text_to_image 维度，使用 {len(text_to_image_models)} 个文生图模型")
+            logger.info("=" * 60)
+            await execute_models_by_groups(
+                target_model_list=text_to_image_models,
+                all_questions=text_to_image_questions,
+                storage=storage,
+                concurrency_groups=concurrency_groups,
+                timeout=timeout,
+                max_concurrent=max_concurrent,
+                reasoning_enabled=reasoning_enabled,
+                max_retries=max_retries,
+                retry_delay=retry_delay,
+                rate_limit_per_second=rate_limit_per_second,
+                rate_limit_per_minute=rate_limit_per_minute,
+                tpm=tpm,
+                model_error_handlers=model_error_handlers,
+                config_manager=config_manager,
+                task_id=task_id,
             )
         
         if other_questions:
@@ -678,4 +845,6 @@ async def batch_gen_llm_answer(
                 rate_limit_per_minute=rate_limit_per_minute,
                 tpm=tpm,
                 model_error_handlers=model_error_handlers,
+                config_manager=config_manager,
+                task_id=task_id,
             )
