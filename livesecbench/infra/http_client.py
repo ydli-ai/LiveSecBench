@@ -362,6 +362,9 @@ class RetryableHTTPClient:
                 if error_info:
                     error_code = error_info['code']
                     error_message = error_info['message']
+
+                    if error_code == 502 and 'inappropriate' in error_message:
+                        return error_message
                     
                     if error_code == '400' or error_code == 400:
                         logger.error(
