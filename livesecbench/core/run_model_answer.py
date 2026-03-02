@@ -135,6 +135,8 @@ async def single_question_call(
                     
                     if error_code == '204' or error_type == 'content_filtered':
                         answer = error_message or '内容审查：该问题触发了安全过滤'
+                    if error_type == 'censorship_blocked':
+                        answer = error_message or '您所提供的内容或模型生成的内容已被屏蔽。'
     
             if answer is None:
                 if model in model_error_handlers:
