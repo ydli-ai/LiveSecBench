@@ -38,6 +38,7 @@ async def single_question_call(
         provider_ignore: Optional[list] = None,
         endpoint: str = "chat/completions",
         use_structured_content: bool = False,
+        stream: bool = False,
 ) -> Dict[str, Any]:
     """测试单个问题，获取模型的回答"""
     prompt = input_data.get('question_text') or input_data.get('prompt', '')
@@ -80,7 +81,7 @@ async def single_question_call(
         else:
             messages = [{"role": "user", "content": prompt}]
         
-        req_data = {
+        req_data: Dict[str, Any] = {
             "model": model,
             "messages": messages
         }
@@ -100,12 +101,17 @@ async def single_question_call(
                 'question_id': input_data.get('question_id', ''),
                 'dimension': input_data.get('dimension', ''),
             }
+            # 对于需要流式的模型，向底层接口显式传入 stream 标记
+            if stream:
+                req_data["stream"] = True
+
             output = await http_client.post(
                 endpoint=endpoint,
                 json_data=req_data,
                 context_name=f"模型 {model_name}",
                 task_type="answer",
-                identifier=identifier
+                identifier=identifier,
+                stream=stream,
             )
             # logger.debug(f"req_data: {req_data}")
             # logger.debug(f"model_name: {model_name}, output: {output}")
@@ -438,6 +444,8 @@ async def batch_test_model(
         tasks = []
         completed_count = 0
         image_source_priority = model_item.get('image_source_priority', 'url')
+        # 是否按配置启用流式输出（仅影响解析方式，对评测结果保持一次性输出）
+        stream = bool(model_item.get('api_config', {}).get('stream', False))
         
         for idx, item in enumerate(pending_questions, 1):
             if is_text_to_image:
@@ -493,6 +501,7 @@ async def batch_test_model(
                 provider_ignore=provider_ignore,
                 endpoint=endpoint,
                 use_structured_content=use_structured_content,
+                stream=stream,
             )
             task = asyncio.create_task(coro)
             tasks.append(task)
