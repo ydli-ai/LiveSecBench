@@ -334,6 +334,8 @@ class RetryableHTTPClient:
                         error_code = output['error']['code']
                         if error_code and error_code == "10013":
                             return output['error']
+                        if error_code and error_code == "request_body_blocked":
+                            return output['error']['message']
                     if attempt < self.max_retries - 1:
                         wait_time = self.retry_delay * (2 ** attempt)
                         logger.info(f"等待 {wait_time:.2f}s 后重试{context_name}{identifier_str}...")
