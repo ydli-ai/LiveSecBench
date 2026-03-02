@@ -115,6 +115,81 @@ class RateLimiter:
                     self.token_timestamps.append((now, int(tokens), False))
                     self.token_sum += int(tokens)
 
+
+class RetryableHTTPClient:
+    """带重试机制的HTTP客户端: 支持自动重试、限流处理、速率限制、JSON修复"""
+    
+    def __init__(
+        self,
+        base_url: str,
+        api_key: str,
+        timeout: int = 210,
+        max_retries: int = 5,
+        retry_delay: int = 1,
+        rate_limiter: Optional[RateLimiter] = None,
+    ):
+        self.base_url = base_url.rstrip('/')
+        self.api_key = api_key
+        self.timeout = timeout
+        self.max_retries = max_retries
+        self.retry_delay = retry_delay
+        self.rate_limiter = rate_limiter
+        self._client: Optional[httpx.AsyncClient] = None
+        self._client_lock = asyncio.Lock()
+        self._timeout = httpx.Timeout(self.timeout, connect=30.0)
+        self._atexit_registered = False
+
+    async def _get_client(self) -> httpx.AsyncClient:
+        if self._client is not None:
+            return self._client
+
+        async with self._client_lock:
+            if self._client is not None:
+                return self._client
+
+            self._client = httpx.AsyncClient(
+                base_url=self.base_url,
+                timeout=self._timeout,
+                http2=True,
+            )
+            return self._client
+
+    async def aclose(self) -> None:
+        """在异步上下文关闭底层HTTP客户端"""
+        client = self._client
+        if client is None:
+            return
+        self._client = None
+        await client.aclose()
+        
+    def _extract_error_info(self, output: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """从响应中提取错误信息，支持多种错误格式"""
+        error_info = None
+        if isinstance(output, dict):
+            if 'error' in output and output['error']:
+                error_info = output['error']
+            elif 'errors' in output and output['errors']:
+                error_info = output['errors']
+        
+        if not error_info:
+            return None
+        
+        error_code = ''
+        error_message = error_info
+        
+        if isinstance(error_info, dict):
+            error_code = str(error_info.get('code') or error_info.get('status') or '')
+            error_message = error_info.get('message') or error_info
+        elif isinstance(error_info, list) and error_info:
+            first_error = error_info[0]
+            if isinstance(first_error, dict):
+                error_code = str(first_error.get('code') or first_error.get('status') or '')
+                error_message = first_error.get('message') or first_error
+            else:
+                error_message = first_error
+        
+        return {'code': error_code, 'message': error_message}
+    
     def _parse_streaming_response(self, raw_text: str) -> Dict[str, Any]:
         """
         解析流式响应，将增量 delta 合并为一次性完整输出。
@@ -241,81 +316,6 @@ class RateLimiter:
                 output[key] = last_meta[key]
 
         return output
-
-
-class RetryableHTTPClient:
-    """带重试机制的HTTP客户端: 支持自动重试、限流处理、速率限制、JSON修复"""
-    
-    def __init__(
-        self,
-        base_url: str,
-        api_key: str,
-        timeout: int = 210,
-        max_retries: int = 5,
-        retry_delay: int = 1,
-        rate_limiter: Optional[RateLimiter] = None,
-    ):
-        self.base_url = base_url.rstrip('/')
-        self.api_key = api_key
-        self.timeout = timeout
-        self.max_retries = max_retries
-        self.retry_delay = retry_delay
-        self.rate_limiter = rate_limiter
-        self._client: Optional[httpx.AsyncClient] = None
-        self._client_lock = asyncio.Lock()
-        self._timeout = httpx.Timeout(self.timeout, connect=30.0)
-        self._atexit_registered = False
-
-    async def _get_client(self) -> httpx.AsyncClient:
-        if self._client is not None:
-            return self._client
-
-        async with self._client_lock:
-            if self._client is not None:
-                return self._client
-
-            self._client = httpx.AsyncClient(
-                base_url=self.base_url,
-                timeout=self._timeout,
-                http2=True,
-            )
-            return self._client
-
-    async def aclose(self) -> None:
-        """在异步上下文关闭底层HTTP客户端"""
-        client = self._client
-        if client is None:
-            return
-        self._client = None
-        await client.aclose()
-        
-    def _extract_error_info(self, output: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-        """从响应中提取错误信息，支持多种错误格式"""
-        error_info = None
-        if isinstance(output, dict):
-            if 'error' in output and output['error']:
-                error_info = output['error']
-            elif 'errors' in output and output['errors']:
-                error_info = output['errors']
-        
-        if not error_info:
-            return None
-        
-        error_code = ''
-        error_message = error_info
-        
-        if isinstance(error_info, dict):
-            error_code = str(error_info.get('code') or error_info.get('status') or '')
-            error_message = error_info.get('message') or error_info
-        elif isinstance(error_info, list) and error_info:
-            first_error = error_info[0]
-            if isinstance(first_error, dict):
-                error_code = str(first_error.get('code') or first_error.get('status') or '')
-                error_message = first_error.get('message') or first_error
-            else:
-                error_message = first_error
-        
-        return {'code': error_code, 'message': error_message}
     
     async def post(
         self,
