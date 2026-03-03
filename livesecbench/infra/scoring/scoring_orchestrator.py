@@ -159,12 +159,19 @@ class ScoringOrchestrator:
                 
                 answer_a = result_a.get('answer')
                 answer_b = result_b.get('answer')
-                
+
                 if not answer_a or not answer_b:
                     skipped_count += 1
                     self.logger.debug(
                         f"跳过对战（缺少回答）: {model_a}{'(无答案)' if not answer_a else ''} vs "
                         f"{model_b}{'(无答案)' if not answer_b else ''} | 题目: {prompt[:50]}..."
+                    )
+                    continue
+
+                if answer_a == answer_b:
+                    skipped_count += 1
+                    self.logger.debug(
+                        f"跳过对战（回答相同）: {model_a} vs {model_b} | 题目: {prompt[:50]}..."
                     )
                     continue
                 
