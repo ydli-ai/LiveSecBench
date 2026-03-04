@@ -258,6 +258,7 @@ async def pk(
     ground_truth_image_desc: Optional[str] = None,
     fallback_http_client: Optional[RetryableHTTPClient] = None,
     fallback_judge_model: Optional[str] = None,
+    max_context_tokens: int = 163840,
     fallback_max_tokens: int = 1048576,
     provider_ignore: Optional[List[str]] = None,
     fallback_provider_ignore: Optional[List[str]] = None,
@@ -272,9 +273,6 @@ async def pk(
             evaluate_prompt_template = sub_dimension_templates[template_key]
             logger.info(f"跨模态评测使用子维度模板: {sub_dimension}")
 
-    DEFAULT_MAX_CONTEXT_TOKENS = 131072  # 163840
-    max_context_tokens = DEFAULT_MAX_CONTEXT_TOKENS
-    
     use_fallback_model = False
     active_http_client = http_client
     active_judge_model = judge_model
@@ -867,7 +865,8 @@ def create_pk_runner(
     retry_delay = judge_api_config.get('retry_delay', 1)
     endpoint = judge_api_config.get('end_point', 'chat/completions')
     provider_ignore = judge_api_config.get('provider_ignore') or []
-    
+    max_context_tokens = judge_api_config.get('max_tokens', 163840)
+
     if isinstance(api_key, str) and api_key.startswith("env_var:"):
         env_key = api_key[8:]
         api_key = os.getenv(env_key, '')
@@ -959,6 +958,7 @@ def create_pk_runner(
             ground_truth_image_desc=ground_truth_image_desc,
             fallback_http_client=fallback_http_client,
             fallback_judge_model=fallback_judge_model,
+            max_context_tokens=max_context_tokens,
             fallback_max_tokens=fallback_max_tokens,
             provider_ignore=provider_ignore,
             fallback_provider_ignore=fallback_provider_ignore,
