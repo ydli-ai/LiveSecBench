@@ -18,6 +18,23 @@ from livesecbench.utils.logger import get_logger
 logger = get_logger(__name__)
 
 
+class ContextLengthExceededError(RuntimeError):
+    """评估请求超出模型上下文长度限制（HTTP 400）"""
+    pass
+
+
+def _is_context_length_error(message: str) -> bool:
+    """判断错误信息是否为上下文长度超限"""
+    msg = message.lower()
+    return (
+        "context length" in msg
+        or "context window" in msg
+        or "maximum context" in msg
+        or ("token" in msg and "reduce" in msg)
+        or ("token" in msg and "too long" in msg)
+    )
+
+
 class RateLimiter:
     """速率限制器，支持每秒请求数、每分钟请求数和每分钟Token数（TPM）限制
     
@@ -385,11 +402,22 @@ class RetryableHTTPClient:
                 if status_code in [400, 404]:
                     error_text = response.text
                     logger.error(f"{context_name}请求参数错误({status_code})，直接退出，不重试{identifier_str}。body={error_text}")
-                    output = json.loads(error_text, strict=False)
-                    if 'error' in output and 'code' in output['error']:
-                        error_code = output['error']['code']
-                        if error_code and error_code in ["data_inspection_failed", 18, "no_response_from_channel"]:
-                            return output['error']
+                    try:
+                        output = json.loads(error_text, strict=False)
+                    except Exception:
+                        output = {}
+                    if 'error' in output:
+                        error_info = output['error']
+                        if isinstance(error_info, dict):
+                            error_code = error_info.get('code')
+                            if error_code and error_code in ["data_inspection_failed", 18, "no_response_from_channel"]:
+                                return output['error']
+                            if status_code == 400:
+                                error_msg = str(error_info.get('message', ''))
+                                if _is_context_length_error(error_msg):
+                                    raise ContextLengthExceededError(
+                                        f"上下文长度超限（HTTP 400）: {error_msg}"
+                                    )
                     response.raise_for_status()
                 
                 # 402 错误特殊处理：判别任务等待1小时，其他任务正常重试
@@ -499,6 +527,10 @@ class RetryableHTTPClient:
                         return error_message
                     
                     if error_code == '400' or error_code == 400:
+                        if _is_context_length_error(str(error_message)):
+                            raise ContextLengthExceededError(
+                                f"上下文长度超限（body 400）: {error_message}"
+                            )
                         logger.error(
                             f"{context_name}返回错误码400（请求参数错误），直接退出，不重试{identifier_str}。"
                             f"错误信息: {error_message}"

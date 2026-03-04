@@ -7,7 +7,7 @@ import traceback
 from typing import Optional, Tuple, Dict, Any, Callable, List
 
 from livesecbench.infra.config import ConfigManager
-from livesecbench.infra.http_client import RetryableHTTPClient
+from livesecbench.infra.http_client import RetryableHTTPClient, ContextLengthExceededError
 
 try:
     from livesecbench.utils.token_util import get_token_count
@@ -272,7 +272,7 @@ async def pk(
             evaluate_prompt_template = sub_dimension_templates[template_key]
             logger.info(f"跨模态评测使用子维度模板: {sub_dimension}")
 
-    DEFAULT_MAX_CONTEXT_TOKENS = 131072
+    DEFAULT_MAX_CONTEXT_TOKENS = 131072  # 163840
     max_context_tokens = DEFAULT_MAX_CONTEXT_TOKENS
     
     use_fallback_model = False
@@ -681,94 +681,129 @@ async def pk(
         logger.debug(f"OpenRouter provider过滤: ignore={active_provider_ignore}")
 
     start_time = time.time()
-    
-    try:
-        identifier = {
-            'category': category,
-            'question': question[:50] if len(question) > 50 else question,
-            'model_A': model_A,
-            'model_B': model_B,
-        }
-        if use_fallback_model:
-            logger.info(f"✓ 使用大上下文模型处理: {active_judge_model}")
-        
-        output = await active_http_client.post(
-            endpoint=endpoint,
-            json_data=req_data,
-            context_name="PK判别模型",
-            task_type="judge",
-            identifier=identifier
-        )
-        
-        logger.debug(f"PK请求响应: {json.dumps(output, ensure_ascii=False, indent=2)[:500]}")
-        
-        if not output or 'choices' not in output:
-            logger.error(f'PK请求失败: 响应格式异常，缺少choices字段。完整响应: {json.dumps(output, ensure_ascii=False)[:1000]}')
-            return None, None, None, None, {}
-        
-        if not output['choices'] or len(output['choices']) == 0:
-            logger.error(f'PK请求失败: choices数组为空。完整响应: {json.dumps(output, ensure_ascii=False)[:1000]}')
-            return None, None, None, None, {}
-        
-        if 'message' not in output['choices'][0]:
-            logger.error(f'PK请求失败: choices[0]缺少message字段。完整响应: {json.dumps(output, ensure_ascii=False)[:1000]}')
-            return None, None, None, None, {}
-        
-        content = output['choices'][0]['message'].get('content', '')
-        if not content:
-            logger.error(f'PK请求失败: 响应内容为空。完整响应: {json.dumps(output, ensure_ascii=False)[:1000]}')
-            logger.error(f'请求信息: model={active_judge_model}, prompt_length={len(prompt)}, question={question[:100]}')
-            return None, None, None, None, {}
-        
-        prompt_tokens = output.get('usage', {}).get('prompt_tokens', 0)
-        completion_tokens = output.get('usage', {}).get('completion_tokens', 0)
-        
-        logger.debug(f"PK响应原始内容: {content[:500]}")
-        
-        json_content = _extract_json_from_code_block(content)
-        
+
+    pk_winner = None
+    pk_reason = ''
+    prompt_tokens = 0
+    completion_tokens = 0
+    _ctx_fallback_attempted = False
+
+    for _api_attempt in range(2):
         try:
-            json_content = repair_json(json_content, ensure_ascii=False)
-            model_answer_res = json.loads(json_content)
-        except json.JSONDecodeError as json_err:
-            logger.error(f'PK请求失败: JSON解析错误 - {str(json_err)}')
-            logger.error(f'无法解析的响应内容: {content[:1000]}')
+            identifier = {
+                'category': category,
+                'question': question[:50] if len(question) > 50 else question,
+                'model_A': model_A,
+                'model_B': model_B,
+            }
+            if use_fallback_model:
+                logger.info(f"✓ 使用大上下文模型处理: {active_judge_model}")
+
+            output = await active_http_client.post(
+                endpoint=endpoint,
+                json_data=req_data,
+                context_name="PK判别模型",
+                task_type="judge",
+                identifier=identifier
+            )
+
+            logger.debug(f"PK请求响应: {json.dumps(output, ensure_ascii=False, indent=2)[:500]}")
+
+            if not output or 'choices' not in output:
+                logger.error(f'PK请求失败: 响应格式异常，缺少choices字段。完整响应: {json.dumps(output, ensure_ascii=False)[:1000]}')
+                return None, None, None, None, {}
+
+            if not output['choices'] or len(output['choices']) == 0:
+                logger.error(f'PK请求失败: choices数组为空。完整响应: {json.dumps(output, ensure_ascii=False)[:1000]}')
+                return None, None, None, None, {}
+
+            if 'message' not in output['choices'][0]:
+                logger.error(f'PK请求失败: choices[0]缺少message字段。完整响应: {json.dumps(output, ensure_ascii=False)[:1000]}')
+                return None, None, None, None, {}
+
+            content = output['choices'][0]['message'].get('content', '')
+            if not content:
+                logger.error(f'PK请求失败: 响应内容为空。完整响应: {json.dumps(output, ensure_ascii=False)[:1000]}')
+                logger.error(f'请求信息: model={active_judge_model}, prompt_length={len(prompt)}, question={question[:100]}')
+                return None, None, None, None, {}
+
+            prompt_tokens = output.get('usage', {}).get('prompt_tokens', 0)
+            completion_tokens = output.get('usage', {}).get('completion_tokens', 0)
+
+            logger.debug(f"PK响应原始内容: {content[:500]}")
+
+            json_content = _extract_json_from_code_block(content)
+
+            try:
+                json_content = repair_json(json_content, ensure_ascii=False)
+                model_answer_res = json.loads(json_content)
+            except json.JSONDecodeError as json_err:
+                logger.error(f'PK请求失败: JSON解析错误 - {str(json_err)}')
+                logger.error(f'无法解析的响应内容: {content[:1000]}')
+                logger.error(f'请求信息: model={active_judge_model}, endpoint={endpoint}, prompt_length={len(prompt)}')
+                logger.error(f'问题: {question[:200] if question else "N/A"}')
+                logger.error(f'模型A: {model_A}, 模型B: {model_B}')
+                return None, None, None, None, {}
+
+            if 'winner' not in model_answer_res:
+                logger.error(f'PK请求失败: 响应JSON缺少winner字段。完整JSON: {json.dumps(model_answer_res, ensure_ascii=False)[:1000]}')
+                logger.error(f'请求信息: model={active_judge_model}, prompt_length={len(prompt)}')
+                return None, None, None, None, {}
+
+            pk_winner = model_answer_res['winner']
+            pk_reason = model_answer_res.get('reason', '')
+            break  # 请求成功，退出重试循环
+
+        except ContextLengthExceededError as ctx_err:
+            if not _ctx_fallback_attempted and not use_fallback_model and fallback_http_client and fallback_judge_model:
+                logger.warning(
+                    f"🔄 主模型 API 返回 400 上下文超限，自动切换到 fallback 模型: {fallback_judge_model}。"
+                    f"错误: {ctx_err}"
+                )
+                _ctx_fallback_attempted = True
+                use_fallback_model = True
+                active_http_client = fallback_http_client
+                active_judge_model = fallback_judge_model
+                req_data["model"] = fallback_judge_model
+                active_provider_ignore = fallback_provider_ignore
+                if active_provider_ignore:
+                    req_data["provider"] = {"ignore": active_provider_ignore}
+                elif "provider" in req_data:
+                    del req_data["provider"]
+                continue  # 使用 fallback 模型重试
+            else:
+                logger.error(
+                    f"PK请求失败: 400上下文超限，fallback 模型也无法处理或未配置。"
+                    f"model={active_judge_model}, 错误: {ctx_err}"
+                )
+                return None, None, None, None, {}
+
+        except KeyError as key_err:
+            logger.error(f'PK请求失败: 响应缺少必要字段 - {str(key_err)}')
+            logger.error(f'异常类型: KeyError, 堆栈: {repr(key_err)}')
             logger.error(f'请求信息: model={active_judge_model}, endpoint={endpoint}, prompt_length={len(prompt)}')
             logger.error(f'问题: {question[:200] if question else "N/A"}')
             logger.error(f'模型A: {model_A}, 模型B: {model_B}')
+            logger.error(f'完整堆栈: {traceback.format_exc()}')
             return None, None, None, None, {}
-        
-        if 'winner' not in model_answer_res:
-            logger.error(f'PK请求失败: 响应JSON缺少winner字段。完整JSON: {json.dumps(model_answer_res, ensure_ascii=False)[:1000]}')
-            logger.error(f'请求信息: model={active_judge_model}, prompt_length={len(prompt)}')
+        except json.JSONDecodeError as json_err:
+            logger.error(f'PK请求失败: JSON解析错误 - {str(json_err)}')
+            logger.error(f'异常类型: JSONDecodeError, 位置: line {json_err.lineno}, column {json_err.colno}')
+            logger.error(f'请求信息: model={active_judge_model}, endpoint={endpoint}, prompt_length={len(prompt)}')
+            logger.error(f'问题: {question[:200] if question else "N/A"}')
+            logger.error(f'模型A: {model_A}, 模型B: {model_B}')
+            logger.error(f'完整堆栈: {traceback.format_exc()}')
             return None, None, None, None, {}
-        
-        pk_winner = model_answer_res['winner']
-        pk_reason = model_answer_res.get('reason', '')
-        
-    except KeyError as key_err:
-        logger.error(f'PK请求失败: 响应缺少必要字段 - {str(key_err)}')
-        logger.error(f'异常类型: KeyError, 堆栈: {repr(key_err)}')
-        logger.error(f'请求信息: model={active_judge_model}, endpoint={endpoint}, prompt_length={len(prompt)}')
-        logger.error(f'问题: {question[:200] if question else "N/A"}')
-        logger.error(f'模型A: {model_A}, 模型B: {model_B}')
-        logger.error(f'完整堆栈: {traceback.format_exc()}')
-        return None, None, None, None, {}
-    except json.JSONDecodeError as json_err:
-        logger.error(f'PK请求失败: JSON解析错误 - {str(json_err)}')
-        logger.error(f'异常类型: JSONDecodeError, 位置: line {json_err.lineno}, column {json_err.colno}')
-        logger.error(f'请求信息: model={active_judge_model}, endpoint={endpoint}, prompt_length={len(prompt)}')
-        logger.error(f'问题: {question[:200] if question else "N/A"}')
-        logger.error(f'模型A: {model_A}, 模型B: {model_B}')
-        logger.error(f'完整堆栈: {traceback.format_exc()}')
-        return None, None, None, None, {}
-    except Exception as e:
-        logger.error(f'PK请求失败: 未预期的异常 - {type(e).__name__}: {str(e)}')
-        logger.error(f'请求信息: model={active_judge_model}, endpoint={endpoint}, prompt_length={len(prompt)}')
-        logger.error(f'问题: {question[:200] if question else "N/A"}')
-        logger.error(f'模型A: {model_A}, 模型B: {model_B}')
-        logger.error(f'使用fallback模型: {use_fallback_model}')
-        logger.error(f'完整堆栈: {traceback.format_exc()}')
+        except Exception as e:
+            logger.error(f'PK请求失败: 未预期的异常 - {type(e).__name__}: {str(e)}')
+            logger.error(f'请求信息: model={active_judge_model}, endpoint={endpoint}, prompt_length={len(prompt)}')
+            logger.error(f'问题: {question[:200] if question else "N/A"}')
+            logger.error(f'模型A: {model_A}, 模型B: {model_B}')
+            logger.error(f'使用fallback模型: {use_fallback_model}')
+            logger.error(f'完整堆栈: {traceback.format_exc()}')
+            return None, None, None, None, {}
+
+    if pk_winner is None:
         return None, None, None, None, {}
     
     end_time = time.time()
