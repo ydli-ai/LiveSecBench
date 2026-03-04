@@ -259,6 +259,8 @@ async def pk(
     fallback_http_client: Optional[RetryableHTTPClient] = None,
     fallback_judge_model: Optional[str] = None,
     fallback_max_tokens: int = 1048576,
+    provider_ignore: Optional[List[str]] = None,
+    fallback_provider_ignore: Optional[List[str]] = None,
 ) -> Tuple[Optional[str], bool, float, Optional[str], Dict[str, Any]]:
     """进行模型A和模型B的PK，返回获胜模型"""
     output_A = answer_A
@@ -673,6 +675,11 @@ async def pk(
         ]
     }
 
+    active_provider_ignore = fallback_provider_ignore if use_fallback_model else provider_ignore
+    if active_provider_ignore:
+        req_data["provider"] = {"ignore": active_provider_ignore}
+        logger.debug(f"OpenRouter provider过滤: ignore={active_provider_ignore}")
+
     start_time = time.time()
     
     try:
@@ -824,6 +831,7 @@ def create_pk_runner(
     max_retries = judge_api_config.get('max_retries', 5)
     retry_delay = judge_api_config.get('retry_delay', 1)
     endpoint = judge_api_config.get('end_point', 'chat/completions')
+    provider_ignore = judge_api_config.get('provider_ignore') or []
     
     if isinstance(api_key, str) and api_key.startswith("env_var:"):
         env_key = api_key[8:]
@@ -845,6 +853,7 @@ def create_pk_runner(
     fallback_http_client = None
     fallback_judge_model = None
     fallback_max_tokens = 1048576
+    fallback_provider_ignore: List[str] = []
     
     fallback_config = judge_api_config.get('fallback', {})
     logger.debug(f"Fallback配置: {fallback_config}")
@@ -854,6 +863,7 @@ def create_pk_runner(
         fallback_api_key = fallback_config.get('api_key', '')
         fallback_judge_model = fallback_config.get('model', 'google/gemini-2.5-flash')
         fallback_max_tokens = fallback_config.get('max_tokens', 1048576)
+        fallback_provider_ignore = fallback_config.get('provider_ignore') or []
         
         if isinstance(fallback_api_key, str) and fallback_api_key.startswith("env_var:"):
             env_key = fallback_api_key[8:]
@@ -915,6 +925,8 @@ def create_pk_runner(
             fallback_http_client=fallback_http_client,
             fallback_judge_model=fallback_judge_model,
             fallback_max_tokens=fallback_max_tokens,
+            provider_ignore=provider_ignore,
+            fallback_provider_ignore=fallback_provider_ignore,
         )
     return pk_wrapper
 
