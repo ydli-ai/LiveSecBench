@@ -132,6 +132,8 @@ def load_models_from_config_manager(config_manager: ConfigManager) -> list:
             'provider': provider,
             'organization': entry.get('organization', ''),
             'api_config': api_config,
+            'task_type': entry.get('task_type', ''),
+            'image_generation': entry.get('image_generation', {}),
         }
         if model_item['model']:
             model_list.append(model_item)

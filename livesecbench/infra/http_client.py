@@ -18,6 +18,23 @@ from livesecbench.utils.logger import get_logger
 logger = get_logger(__name__)
 
 
+class ContextLengthExceededError(RuntimeError):
+    """评估请求超出模型上下文长度限制（HTTP 400）"""
+    pass
+
+
+def _is_context_length_error(message: str) -> bool:
+    """判断错误信息是否为上下文长度超限"""
+    msg = message.lower()
+    return (
+        "context length" in msg
+        or "context window" in msg
+        or "maximum context" in msg
+        or ("token" in msg and "reduce" in msg)
+        or ("token" in msg and "too long" in msg)
+    )
+
+
 class RateLimiter:
     """速率限制器，支持每秒请求数、每分钟请求数和每分钟Token数（TPM）限制
     
@@ -190,6 +207,133 @@ class RetryableHTTPClient:
         
         return {'code': error_code, 'message': error_message}
     
+    def _parse_streaming_response(self, raw_text: str) -> Dict[str, Any]:
+        """
+        解析流式响应，将增量 delta 合并为一次性完整输出。
+        
+        兼容如下形式的分片（每行 / 每event 一条 JSON）：
+        - {"choices":[{"delta":{"role":"assistant","reasoning_content":"…","content":""}}]}
+        - {"choices":[{"delta":{"role":"assistant","content":"…"}}]}
+        - SSE 形式: "data: {json}\\n"
+        """
+        if not raw_text:
+            return {}
+
+        json_chunks = []
+        for line in raw_text.splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            if line.startswith("data:"):
+                line = line[len("data:") :].strip()
+            if not line or line == "[DONE]":
+                continue
+
+            try:
+                obj = json.loads(line)
+            except json.JSONDecodeError:
+                try:
+                    repaired = repair_json(line, ensure_ascii=False)
+                    if not repaired.strip():
+                        continue
+                    obj = json.loads(repaired)
+                except Exception:
+                    logger.debug(f"流式响应分片解析失败，跳过: {line[:200]}")
+                    continue
+
+            if isinstance(obj, dict):
+                json_chunks.append(obj)
+
+        if not json_chunks:
+            return {}
+
+        has_choices = any("choices" in c for c in json_chunks)
+        has_error = any("error" in c for c in json_chunks)
+
+        # 仅有 error 而无 choices 时，按错误响应返回，交由上层统一处理
+        if has_error and not has_choices:
+            for c in reversed(json_chunks):
+                if "error" in c:
+                    return c
+
+        full_content_parts = []
+        reasoning_parts = []
+        role = None
+        provider = None
+        usage: Dict[str, Any] = {}
+        model_name = None
+        last_meta: Dict[str, Any] = {}
+
+        for chunk in json_chunks:
+            last_meta = chunk
+            if provider is None and "provider" in chunk:
+                provider = chunk.get("provider")
+            if not usage and isinstance(chunk.get("usage"), dict):
+                usage = chunk["usage"]
+            if model_name is None and chunk.get("model"):
+                model_name = chunk["model"]
+
+            choices = chunk.get("choices") or []
+            if not choices:
+                continue
+            first = choices[0] or {}
+            delta = first.get("delta") or {}
+            message = first.get("message") or {}
+
+            if isinstance(delta, dict):
+                if role is None and delta.get("role"):
+                    role = delta["role"]
+                rc = delta.get("reasoning_content")
+                if rc:
+                    reasoning_parts.append(rc)
+                cc = delta.get("content")
+                if cc:
+                    full_content_parts.append(cc)
+
+            if isinstance(message, dict):
+                if role is None and message.get("role"):
+                    role = message["role"]
+                rc = message.get("reasoning_content")
+                if rc:
+                    reasoning_parts.append(rc)
+                cc = message.get("content")
+                if cc:
+                    full_content_parts.append(cc)
+
+        role = role or "assistant"
+        final_content = "".join(full_content_parts)
+        final_reasoning = "".join(reasoning_parts) if reasoning_parts else None
+
+        merged_message: Dict[str, Any] = {
+            "role": role,
+            "content": final_content,
+        }
+        if final_reasoning:
+            merged_message["reasoning_content"] = final_reasoning
+
+        output: Dict[str, Any] = {
+            "choices": [
+                {
+                    "index": 0,
+                    "message": merged_message,
+                }
+            ]
+        }
+
+        if usage:
+            output["usage"] = usage
+        if model_name:
+            output["model"] = model_name
+        if provider is not None:
+            output["provider"] = provider
+
+        # 透传部分元数据（如 id/created 等），方便上层使用
+        for key in ("id", "created", "object", "code", "message", "sid"):
+            if key in last_meta:
+                output[key] = last_meta[key]
+
+        return output
+    
     async def post(
         self,
         endpoint: str,
@@ -198,10 +342,11 @@ class RetryableHTTPClient:
         context_name: str = "请求",
         task_type: str = "general",  # 任务类型: "general"(普通), "judge"(判别), "answer"(回答)
         identifier: Optional[Dict[str, Any]] = None,
+        stream: bool = False,
     ) -> Dict[str, Any]:
         """发送POST请求（带重试机制）"""
         client = await self._get_client()
-        url = endpoint.lstrip('/')
+        url = endpoint.lstrip("/")
         
         identifier_str = ""
         if identifier:
@@ -257,11 +402,22 @@ class RetryableHTTPClient:
                 if status_code in [400, 404]:
                     error_text = response.text
                     logger.error(f"{context_name}请求参数错误({status_code})，直接退出，不重试{identifier_str}。body={error_text}")
-                    output = json.loads(error_text, strict=False)
-                    if 'error' in output and 'code' in output['error']:
-                        error_code = output['error']['code']
-                        if error_code and error_code in ["data_inspection_failed", 18, "no_response_from_channel"]:
-                            return output['error']
+                    try:
+                        output = json.loads(error_text, strict=False)
+                    except Exception:
+                        output = {}
+                    if 'error' in output:
+                        error_info = output['error']
+                        if isinstance(error_info, dict):
+                            error_code = error_info.get('code')
+                            if error_code and error_code in ["data_inspection_failed", 18, "no_response_from_channel"]:
+                                return output['error']
+                            if status_code == 400:
+                                error_msg = str(error_info.get('message', ''))
+                                if _is_context_length_error(error_msg):
+                                    raise ContextLengthExceededError(
+                                        f"上下文长度超限（HTTP 400）: {error_msg}"
+                                    )
                     response.raise_for_status()
                 
                 # 402 错误特殊处理：判别任务等待1小时，其他任务正常重试
@@ -334,6 +490,8 @@ class RetryableHTTPClient:
                         error_code = output['error']['code']
                         if error_code and error_code == "10013":
                             return output['error']
+                        if error_code and error_code == "request_body_blocked":
+                            return output['error']['message']
                     if attempt < self.max_retries - 1:
                         wait_time = self.retry_delay * (2 ** attempt)
                         logger.info(f"等待 {wait_time:.2f}s 后重试{context_name}{identifier_str}...")
@@ -342,26 +500,37 @@ class RetryableHTTPClient:
                     else:
                         response.raise_for_status()
                 
-                # 解析响应，优先直接解析，失败时再尝试JSON修复
+                # 解析响应
                 output_content = response.text
-                content_to_parse = output_content
                 output: Dict[str, Any]
-                if not content_to_parse.strip():
-                    content_to_parse = '{}'
-                try:
-                    output = json.loads(content_to_parse, strict=False)
-                except json.JSONDecodeError:
-                    repaired = repair_json(output_content, ensure_ascii=False)
-                    if not repaired.strip():
-                        repaired = '{}'
-                    output = json.loads(repaired, strict=False)
+                if stream:
+                    output = self._parse_streaming_response(output_content)
+                else:
+                    # 非流式响应：优先直接解析，失败时再尝试JSON修复
+                    content_to_parse = output_content
+                    if not content_to_parse.strip():
+                        content_to_parse = '{}'
+                    try:
+                        output = json.loads(content_to_parse, strict=False)
+                    except json.JSONDecodeError:
+                        repaired = repair_json(output_content, ensure_ascii=False)
+                        if not repaired.strip():
+                            repaired = '{}'
+                        output = json.loads(repaired, strict=False)
                 
                 error_info = self._extract_error_info(output)
                 if error_info:
                     error_code = error_info['code']
                     error_message = error_info['message']
+
+                    if error_code == 502 and 'inappropriate' in error_message:
+                        return error_message
                     
                     if error_code == '400' or error_code == 400:
+                        if _is_context_length_error(str(error_message)):
+                            raise ContextLengthExceededError(
+                                f"上下文长度超限（body 400）: {error_message}"
+                            )
                         logger.error(
                             f"{context_name}返回错误码400（请求参数错误），直接退出，不重试{identifier_str}。"
                             f"错误信息: {error_message}"
@@ -446,4 +615,20 @@ class RetryableHTTPClient:
                     raise
         
         raise RuntimeError(f"{context_name}失败{identifier_str}，已重试 {self.max_retries} 次仍未成功")
+
+    async def get(
+        self,
+        endpoint: str,
+        params: Optional[Dict[str, str]] = None,
+        headers: Optional[Dict[str, str]] = None,
+    ) -> tuple[str, bytes]:
+        """发送 GET 请求，返回 (response_text, response_content)。用于 ComfyUI history/view 等。"""
+        client = await self._get_client()
+        url = endpoint.lstrip("/")
+        default_headers = {"Authorization": f"Bearer {self.api_key}"}
+        if headers:
+            default_headers.update(headers)
+        response = await client.get(url=url, params=params or None, headers=default_headers)
+        response.raise_for_status()
+        return (response.text, response.content)
 

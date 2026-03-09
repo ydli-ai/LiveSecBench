@@ -32,6 +32,10 @@ Scan to join the LiveSecBench WeChat group for the latest updates and technical 
 - **🚀 New: Real-time Data Persistence** - Immediate database write after each API call, supporting checkpoint resume
 - **🚀 New: Image Input Support** - Support URL and base64 format image input, with multi-image support
 - **🚀 New: MySQL Storage** - Optional MySQL storage to solve high-concurrency write performance issues
+- **🚀 New: Streaming API Adaptation** - Support `stream=true` responses with automatic SSE chunk aggregation
+- **🚀 New: Context-Overflow Fallback** - Automatically switch to a fallback judge model when HTTP 400 context-length overflow occurs
+- **🚀 New: PK Execution Optimization** - Skip identical answers in pairwise judging and prioritize dataset `reference_answer` as judge reference
+- **🚀 New: Text-to-Image Evaluation** - Support `task_type: text_to_image` with multi-backend generation and caption-based judging
 
 ## Quick Start
 
@@ -81,6 +85,14 @@ judge_model_api:
   base_url: "https://api.deepseek.com/v1"
   api_key: "env_var:DEEPSEEK_API_KEY"  # matches environment variable
   model: "deepseek-chat"
+  max_tokens: 163840
+  provider_ignore: []  # optional: filter provider routes
+  fallback:            # optional: auto fallback on context overflow
+    base_url: "https://openrouter.ai/api/v1"
+    api_key: "env_var:OPENROUTER_API_KEY"
+    model: "google/gemini-2.5-flash"
+    max_tokens: 1048576
+    provider_ignore: []
 ```
 
 ### Run an Evaluation
@@ -108,6 +120,9 @@ The script loads `livesecbench/configs/mock_e2e.yaml`, mocks HTTP responses, and
 - `question_selection`: mix multiple dimensions, versions, or sampling limits.
 - `scoring_settings.model_based.elo`: pairing strategy, convergence rules, and output directories.
 - `judge_model_api`: referee model definition (default `deepseek-chat`).
+- `judge_model_api.max_tokens` defaults to `163840`; tune by model context window. Use `judge_model_api.fallback` to auto-switch to a long-context judge model on HTTP 400 context overflow.
+- `models_to_test[].api_config.stream` enables streaming response mode; chunks are merged into a unified completion-style output.
+- **Text-to-image**: set `task_type: text_to_image` and `api_config.api_provider` (`siliconflow` / `sd_webui` / `comfyui`) in `models_to_test`; add `dimension: text_to_image` and `text_to_image` question set in `question_selection`; generated images are stored at `artifacts/{task_id}/{model_id}/{question_id}/` and converted by `image_postprocess.captioner` into textual descriptions for judge scoring.
 - See `docs/USER_GUIDE.md` for detailed walkthroughs and best practices.
 
 ## Outputs

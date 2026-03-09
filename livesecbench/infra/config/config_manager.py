@@ -265,6 +265,16 @@ class ConfigManager:
     def get_model_error_handlers(self) -> Dict:
         """获取模型错误处理配置"""
         return self._config.get('model_error_handlers', {})
+
+    def get_image_postprocess_config(self) -> Dict:
+        """获取文生图后处理配置（如 captioner），并解析环境变量"""
+        block = self._config.get('image_postprocess', {}) or {}
+        captioner = (block.get('captioner') or {}).copy()
+        if captioner.get('api_key'):
+            captioner['api_key'] = self._resolve_env_var(captioner['api_key'])
+        if captioner.get('base_url') and isinstance(captioner['base_url'], str) and captioner['base_url'].startswith('env_var:'):
+            captioner['base_url'] = self._resolve_env_var(captioner['base_url'])
+        return {'captioner': captioner} if captioner else {}
     
     def get_report_settings(self) -> Dict:
         """获取报告生成配置"""
@@ -297,7 +307,8 @@ class ConfigManager:
                 
                 if not api_config.get('base_url'):
                     errors.append(f"模型配置 #{idx+1} 的 api_config 缺少 base_url")
-                if not api_config.get('api_key'):
+                provider = api_config.get('api_provider', '')
+                if not api_config.get('api_key') and provider not in ('sd_webui', 'comfyui'):
                     errors.append(f"模型配置 #{idx+1} 的 api_config 缺少 api_key")
                 if not api_config.get('model_id'):
                     errors.append(f"模型配置 #{idx+1} 的 api_config 缺少 model_id")

@@ -4,6 +4,7 @@
 """
 
 import asyncio
+import hashlib
 import random
 import time
 from pathlib import Path
@@ -159,7 +160,7 @@ class ScoringOrchestrator:
                 
                 answer_a = result_a.get('answer')
                 answer_b = result_b.get('answer')
-                
+
                 if not answer_a or not answer_b:
                     skipped_count += 1
                     self.logger.debug(
@@ -167,7 +168,19 @@ class ScoringOrchestrator:
                         f"{model_b}{'(无答案)' if not answer_b else ''} | 题目: {prompt[:50]}..."
                     )
                     continue
+
+                if answer_a == answer_b:
+                    skipped_count += 1
+                    self.logger.debug(
+                        f"跳过对战（回答相同）: {model_a} vs {model_b} | 题目: {prompt[:50]}..."
+                    )
+                    continue
                 
+                ref_ans = question_data.get('reference_answer')
+                if isinstance(ref_ans, list):
+                    ref_ans = '\n'.join(ref_ans) if ref_ans else None
+                true_answer = ref_ans or result_a.get('true_answer') or None
+
                 task = {
                     'evaluation_dimension': evaluation_dimension,
                     'category': category,
@@ -178,7 +191,7 @@ class ScoringOrchestrator:
                     'reasoning_b': result_b.get('reasoning'),
                     'answer_a': answer_a,
                     'answer_b': answer_b,
-                    'true_answer': result_a.get('true_answer') if result_a.get('true_answer', '') else None,
+                    'true_answer': true_answer,
                 }
                 
                 if evaluation_dimension in ('cross_modal', '跨模态安全'):
@@ -314,7 +327,8 @@ class ScoringOrchestrator:
     ) -> List[List[dict]]:
         """将题目分组"""
         questions_list = list(questions)
-        seed = hash(tuple(sorted(q.get('question_id', '') for q in questions_list))) % (2**32)
+        key = ''.join(sorted(q.get('question_id', '') for q in questions_list))
+        seed = int(hashlib.md5(key.encode()).hexdigest(), 16) % (2 ** 32)
         self.logger.info(f"{evaluation_dimension} 题目分组时的随机种子: {seed}")
         random.seed(seed)
         random.shuffle(questions_list)

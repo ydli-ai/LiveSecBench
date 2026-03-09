@@ -71,7 +71,10 @@
 livesecbench/
 ├── run_livesecbench.py          # CLI 入口
 ├── core/
-│   ├── run_model_answer.py      # 并发请求被测模型并写入缓存
+│   ├── run_model_answer.py      # 并发请求被测模型并写入缓存（含文生图分支）
+│   ├── run_text_to_image.py     # 文生图单题调用：适配器 + 落盘
+│   ├── image_caption.py         # 文生图后处理：生成图转文字描述供裁判
+│   ├── image_generation/        # 文生图多后端适配器
 │   ├── run_scoring.py           # 维度级 orchestrator（配对/裁判/ELO）
 │   ├── rank.py                  # 聚合排名 & 统计
 │   ├── report.py                # Markdown 报告与提示词
@@ -128,7 +131,16 @@ livesecbench/
 - 成功与失败的结果都会写入 `model_outputs`，字段包含 reasoning、token 统计与题目信息。
 - 支持模型错误处理和备用模型切换，提高稳定性。
 
-### 3.3 评分/裁判流水线
+### 3.3 文生图流水线（text_to_image）
+- **触发条件**：模型配置 `task_type: text_to_image`，题库维度 `text_to_image`。
+- **多后端适配**：`core/image_generation/` 下按 `api_provider` 选择适配器：
+  - **SiliconFlow**：`POST images/generations`，请求体 `model, prompt, image_size, batch_size, num_inference_steps, guidance_scale`，响应 `data[].b64_json` 或 `url`。
+  - **SD WebUI**：`POST sdapi/v1/txt2img`，请求体 `prompt, negative_prompt, steps, cfg_scale, width, height`，响应 `images`（base64 列表）；本地部署通常无 `api_key`。
+  - **ComfyUI**：`POST prompt` 提交 workflow JSON，轮询 `/history/{prompt_id}` 取结果，再通过 `/view` 取图；需配置 workflow 模板，占位符 `{prompt}` 替换提示词。
+- **落盘**：生成图写入 `artifacts/{task_id}/{model_id}/{question_id}/0.png` 等。
+- **后处理**：`image_caption.py` 按 `image_postprocess.captioner` 配置调用视觉模型，将生成图转成文字描述，作为 `answer` 写入 `model_outputs`，供裁判与 ELO 流程使用。
+
+### 3.4 评分/裁判流水线
 - 评分编排器：`ScoringOrchestrator` 协调配对策略、评分算法、收敛检测、PK 运行器。
 - 配对策略：瑞士制（默认）、单循环、随机，均位于 `infra/scoring/pairing_strategies.py`。
 - 评分算法：`ELORatingAlgorithm`，K 值、初始分、logistic 常数可配置；未来可扩展为 Glicko 等。
@@ -136,7 +148,7 @@ livesecbench/
 - 裁判模型：`scorers/model_based_scorer.py` 将题目与模型回答拼接提示词，调用 `judge_model_api`。
 - 输出内容：ELO 历史 CSV、ELO 最终排名 CSV、PK 详情 Excel，均落在 `results/{date}/elo_results/{dimension}/`。
 
-### 3.4 排名与报告
+### 3.5 排名与报告
 - `rank.py`：归一化多维度得分，生成综合榜单与统计摘要 CSV。
 - `report.py`：读取统计数据和维度亮点，输出 Markdown 报告，内嵌生成报告的提示词以便复现。
 
@@ -160,6 +172,7 @@ livesecbench/
   - `{YYYY-MM}-stats*.csv`：统计摘要
   - `summary_report*.md`：Markdown 报告（含提示词）
   - `elo_results/{dimension}/`：ELO 历史/最终排名/PK 详情
+- **文生图生成物**：`artifacts/{task_id}/{model_id}/{question_id}/0.png` 等；配置 `question_selection` 含 `dimension: text_to_image` 且模型 `task_type: text_to_image` 时启用。
 - 输出路径、文件模板可通过 `scoring_settings.model_based.elo` 自定义；在 CI 中可定向到 `tmp/` 或挂载目录。
 
 ### 4.3 存储层

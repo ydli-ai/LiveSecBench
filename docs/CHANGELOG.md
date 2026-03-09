@@ -1,5 +1,22 @@
 # Changelog
 
+## [Unreleased] - 2026-03-09
+- Added:
+  - 补充文生图评测链路文档：覆盖 `task_type: text_to_image`、多后端适配（SiliconFlow / SD WebUI / ComfyUI）、图片落盘与 caption 后处理评分流程
+  - 补充文生图题库校验脚本说明：`scripts/validate_text_to_image_questions.py`
+  - 新增流式 API 适配：支持解析 SSE/delta 分片并聚合为标准 `choices.message` 输出
+  - 新增 `ContextLengthExceededError`，用于识别并上抛上下文长度超限错误
+  - 新增 OpenRouter `provider_ignore` 配置，支持主裁判与 fallback 裁判分别过滤 provider
+- Changed:
+  - 裁判模型 `max_tokens` 默认值更新为 `163840`
+  - 评分流程中，当主裁判模型发生 400 上下文超限时，自动切换 fallback 模型重试
+  - PK 调度优化：跳过双方回答完全相同的对战，减少无效调用
+  - 优先使用题库 `reference_answer`（支持列表拼接）作为裁判参考答案
+  - 题目分组随机种子改为基于 `question_id` 的 MD5，避免进程级 hash 随机化导致复现偏差
+- Fixed:
+  - 增强错误解析逻辑，补充 `request_body_blocked`、特定 502 inappropriate 等场景处理
+  - 增强模型回答错误兜底，补充 `censorship_blocked` 反馈文本
+
 ## [0.1.1] - 2025-12-18
 - Added:
   - 并发分组执行功能，支持并行/串行混合策略，大幅提升评测效率
