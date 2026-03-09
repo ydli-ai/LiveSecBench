@@ -93,7 +93,11 @@ print(tm.task_id)  # 例如：20251118_120001
 
 ```python
 import asyncio
-from livesecbench.infra.http_client import RetryableHTTPClient, RateLimiter
+from livesecbench.infra.http_client import (
+    RetryableHTTPClient,
+    RateLimiter,
+    ContextLengthExceededError,
+)
 
 async def call_model():
     # 支持每秒请求数、每分钟请求数和每分钟Token数（TPM）限制
@@ -122,6 +126,7 @@ async def call_model():
         context_name="demo call",
         task_type="general",  # 任务类型: "general", "judge", "answer"
         identifier={"model": "gpt-4", "dimension": "ethics"},  # 请求标识
+        stream=False,  # 流式协议时设为 True，客户端会自动聚合分片
     )
     
     # TPM精确统计（在请求完成后调用）
@@ -140,6 +145,8 @@ asyncio.run(call_model())
 - `task_type`参数区分不同类型的任务。
 - 支持TPM（每分钟Token数）限流，采用预估+精确统计策略。
 - 自动处理HTTP 204（内容审查）和429（限流）响应。
+- `stream=True` 时支持解析 SSE / delta 增量内容，并返回与非流式一致的 `choices[0].message.content` 结构。
+- 当响应为 400 且错误为上下文长度超限时，会抛出 `ContextLengthExceededError`，可由上层触发 fallback 模型重试。
 - **新增**：支持为单个模型设置独立的RPM、TPM和并发限制。
 - **新增**：支持模型API切换功能，可在不同API端点间切换。
 
@@ -375,6 +382,46 @@ if token_util.is_context_overflow(prompt, max_tokens=32000):
     # 自动截断或重新格式化
     processed_prompt = token_util.truncate_to_fit(prompt, max_tokens=32000)
 ```
+
+### 6.4 文生图评测 API
+**位置**：`livesecbench/core/run_text_to_image.py`、`livesecbench/core/image_caption.py`
+
+```python
+from pathlib import Path
+from livesecbench.core.run_text_to_image import run_single_text_to_image_call
+from livesecbench.core.image_caption import caption_images
+
+# 1) 生成图片（按 api_provider 自动选择适配器）
+payload = await run_single_text_to_image_call(
+    http_client=http_client,
+    semaphore=semaphore,
+    model_name="Kolors (SiliconFlow)",
+    model_id="Kwai-Kolors/Kolors",
+    input_data={"question_id": "t2i_001", "question_text": "生成一张海报"},
+    api_config={"api_provider": "siliconflow", "end_point": "images/generations"},
+    image_generation={"image_size": "1024x1024", "batch_size": 1},
+    artifacts_base=Path("artifacts"),
+    task_id="20260309_120000",
+)
+
+# 2) 图片转描述（用于后续裁判评分）
+answer, details = await caption_images(
+    image_outputs=payload.get("image_outputs", []),
+    captioner_config={
+        "base_url": "https://api.deepseek.com/v1",
+        "api_key": "env_var:DEEPSEEK_API_KEY",
+        "model": "deepseek-chat",
+        "end_point": "chat/completions",
+    },
+    risk_tags="violence, hate",
+)
+```
+
+要点：
+- 文生图链路入口由 `models_to_test[].task_type = text_to_image` 触发。
+- 适配器层统一抽象在 `core/image_generation/`，当前支持 `siliconflow`、`sd_webui`、`comfyui`。
+- 生成结果统一写入 `image_outputs`，并持久化到 `artifacts/{task_id}/{model_id}/{question_id}/`。
+- `caption_images()` 输出的文本描述会作为 `model_outputs.answer` 进入后续 PK / ELO 评分流程。
 
 ---
 

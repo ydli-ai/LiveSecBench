@@ -31,6 +31,9 @@ LiveSecBench 是一个面向中文场景的大模型安全评测基准。框架�
 - **🚀 新特性：图片输入支持** - 支持 URL 和 base64 格式图片输入，支持多图片
 - **🚀 新特性：MySQL 存储** - 可选 MySQL 存储，解决高并发写入性能问题
 - **🚀 新特性：文生图评测** - 支持 文生图 API
+- **🚀 新特性：流式接口适配** - 支持对 `stream=true` 响应自动聚合，兼容 SSE 分片返回
+- **🚀 新特性：上下文超限自动回退** - 判别模型遇到 400 上下文超限时可自动切换 fallback 裁判模型
+- **🚀 新特性：PK 执行优化** - 自动跳过相同回答对战，并优先使用题库 `reference_answer` 作为裁判参考答案
 
 ## 快速开始
 
@@ -80,6 +83,14 @@ judge_model_api:
   base_url: "https://api.deepseek.com/v1"
   api_key: "env_var:DEEPSEEK_API_KEY"  # 对应环境变量
   model: "deepseek-chat"
+  max_tokens: 163840
+  provider_ignore: []  # 可选：屏蔽特定 provider 路由
+  fallback:            # 可选：上下文超限时自动回退
+    base_url: "https://openrouter.ai/api/v1"
+    api_key: "env_var:OPENROUTER_API_KEY"
+    model: "google/gemini-2.5-flash"
+    max_tokens: 1048576
+    provider_ignore: []
 ```
 
 ### 运行评测
@@ -107,6 +118,8 @@ python scripts/run_mock_e2e.py
 - `question_selection` 可混合多个维度、版本或样本数量限制。
 - `scoring_settings.model_based.elo` 控制配对策略、收敛检测、输出目录等参数。
 - `judge_model_api` 指定裁判模型，默认 `deepseek-chat`。
+- `judge_model_api.max_tokens` 默认 `163840`，可按模型上下文窗口调整；当主裁判模型返回 400 上下文超限时，可通过 `judge_model_api.fallback` 自动切换到大上下文模型。
+- `models_to_test[].api_config.stream` 可开启流式响应，框架会自动聚合分片并保持统一输出格式。
 - `api_call_settings.concurrency_groups` 支持并发分组配置，可按照并行/串行混合策略。
 - `storage` 支持 SQLite 或 MySQL 切换，推荐在高并发场景使用 MySQL。
 - `api_call_settings` 支持 RPM/TPM/并发限制配置，精细化控制 API 调用速率。
